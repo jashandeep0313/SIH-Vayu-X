@@ -22,7 +22,7 @@ export default function History({ cyclones }) {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-line text-2xs uppercase tracking-wide text-ink-mute">
+                <tr className="border-b border-hairline text-2xs uppercase tracking-wide text-ink-mute">
                   <th className="px-4 py-2 font-medium">System</th>
                   <th className="px-2 py-2 font-medium">Basin</th>
                   <th className="px-2 py-2 font-medium">Peak</th>
@@ -31,7 +31,7 @@ export default function History({ cyclones }) {
                   <th className="px-4 py-2 font-medium">Last seen</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line/60">
+              <tbody className="divide-y divide-[#1C273899]">
                 {cyclones.map((c) => (
                   <tr key={c.id} className="transition hover:bg-raised">
                     <td className="px-4 py-2.5 font-medium text-ink">

@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     MODEL_SERVICE_URL: str = "http://localhost:8001"
     ALERT_SERVICE_URL: str = "http://localhost:8002"
 
+    # Windy Point Forecast API — optional independent cross-check on conditions
+    # at the forecast landfall point. Point service only: no map tiles.
+    WINDY_POINT_API_KEY: str = ""
+
     # Object storage
     S3_ENDPOINT: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "minioadmin"

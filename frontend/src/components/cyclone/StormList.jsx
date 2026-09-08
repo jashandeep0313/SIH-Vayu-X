@@ -11,7 +11,7 @@ import {
 
 export default function StormList({ cyclones, selectedId, onSelect }) {
   return (
-    <ul className="divide-y divide-line">
+    <ul className="divide-y divide-hairline">
       {cyclones.map((cyclone) => {
         const obs = cyclone.latest_observation ?? {};
         const isSelected = cyclone.id === selectedId;
@@ -23,19 +23,22 @@ export default function StormList({ cyclones, selectedId, onSelect }) {
               type="button"
               onClick={() => onSelect(cyclone.id)}
               className={`relative w-full px-4 py-3 text-left transition ${
-                isSelected ? 'bg-overlay' : 'hover:bg-raised'
+                isSelected ? 'bg-overlay' : 'hover:bg-[#131A27B3]'
               }`}
             >
-              {isSelected && (
-                <span
-                  className="absolute inset-y-0 left-0 w-0.5"
-                  style={{ backgroundColor: color }}
-                />
-              )}
-
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="truncate text-[13px] font-semibold text-ink">
+                  {/* Selection reads from a category-coloured dot instead of an
+                      edge rule, keeping the row flush with the panel */}
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full transition-opacity"
+                    style={{ backgroundColor: color, opacity: isSelected ? 1 : 0.35 }}
+                  />
+                  <span
+                    className={`truncate font-display text-[13px] ${
+                      isSelected ? 'font-medium text-ink' : 'text-ink-dim'
+                    }`}
+                  >
                     {cyclone.name ?? 'Unnamed system'}
                   </span>
                   <CategoryBadge category={obs.intensity_category} />

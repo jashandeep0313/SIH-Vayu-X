@@ -86,8 +86,8 @@ export default function Alerts({ alerts, loading, error, onRefresh }) {
           })}
         </div>
 
-        <div className="flex items-center gap-1.5 rounded-md border border-line bg-raised px-2.5 py-1.5">
-          <ShieldAlert size={12} className="text-accent" />
+        <div className="flex items-center gap-1.5 rounded-md border border-hairline bg-raised px-2.5 py-1.5">
+          <ShieldAlert size={12} className="text-gold" />
           <span className="text-2xs text-ink-dim">
             Dry run — alerts logged, not delivered
           </span>
@@ -108,12 +108,15 @@ export default function Alerts({ alerts, loading, error, onRefresh }) {
             const isAck = acknowledged[alert.id] || alert.status === 'acknowledged';
 
             return (
-              <article
-                key={alert.id}
-                className="panel overflow-hidden"
-                style={{ borderLeftColor: color, borderLeftWidth: 3 }}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+              <article key={alert.id} className="panel overflow-hidden">
+                {/* Severity reads from a tinted header band rather than a rule
+                    down the edge — the tint carries further at a glance. */}
+                <div
+                  className="flex flex-wrap items-start justify-between gap-3 px-4 py-3"
+                  style={{
+                    background: `linear-gradient(90deg, ${color}14 0%, ${color}00 42%)`,
+                  }}
+                >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <SeverityBadge severity={alert.severity} />
@@ -124,7 +127,7 @@ export default function Alerts({ alerts, loading, error, onRefresh }) {
                         <span className="text-2xs text-ink-dim">· {alert.cyclone_name}</span>
                       )}
                       {isAck && (
-                        <span className="chip bg-severity-green/15 text-severity-green">
+                        <span className="chip bg-[#7FAF9A26] text-severity-green">
                           Acknowledged
                         </span>
                       )}
@@ -153,14 +156,14 @@ export default function Alerts({ alerts, loading, error, onRefresh }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-px border-t border-line bg-line md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-px border-t border-hairline bg-hairline md:grid-cols-3">
                   <Block title="Affected areas">
                     {alert.affected_regions?.length ? (
                       <div className="flex flex-wrap gap-1">
                         {alert.affected_regions.map((r) => (
                           <span
                             key={r}
-                            className="rounded border border-line bg-overlay px-1.5 py-0.5 text-2xs text-ink-dim"
+                            className="rounded border border-hairline bg-overlay px-1.5 py-0.5 text-2xs text-ink-dim"
                           >
                             {r}
                           </span>
@@ -206,7 +209,7 @@ export default function Alerts({ alerts, loading, error, onRefresh }) {
                   </Block>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-2xs text-ink-mute">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-hairline px-4 py-2 text-2xs text-ink-mute">
                   <span>
                     Rule <span className="text-ink-dim">{alert.matched_rule}</span>
                   </span>

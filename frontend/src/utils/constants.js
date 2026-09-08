@@ -10,26 +10,41 @@ export const INTENSITY_CATEGORIES = {
   SuCS: { label: 'Super Cyclonic Storm', short: 'Super Cyclone', maxWindKt: Infinity },
 };
 
-/** Escalating cool-to-hot ramp: severity must be readable from colour alone. */
+/**
+ * Escalating cool-to-warm ramp drawn from the Prosperon palette (slate → sage →
+ * gold → orange → red). Severity must be readable from colour alone.
+ */
 export const CATEGORY_COLORS = {
-  LPA: '#64748B',
-  D: '#38BDF8',
-  DD: '#22D3EE',
-  CS: '#34D399',
-  SCS: '#F5B301',
-  VSCS: '#FF7A1A',
-  ESCS: '#EF4444',
-  SuCS: '#D946EF',
+  LPA: '#686F7C',
+  D: '#6A9280',
+  DD: '#94BCAB',
+  CS: '#E9D79B',
+  SCS: '#D3AF37',
+  VSCS: '#E07A3F',
+  ESCS: '#D4544E',
+  SuCS: '#A8446B',
 };
 
 export const CATEGORY_ORDER = ['LPA', 'D', 'DD', 'CS', 'SCS', 'VSCS', 'ESCS', 'SuCS'];
 
 /** IMD colour-coded warning levels. */
 export const SEVERITY = {
-  GREEN: { color: '#22C55E', label: 'Monitor', action: 'No action required' },
-  YELLOW: { color: '#F5B301', label: 'Watch', action: 'Be updated' },
-  ORANGE: { color: '#FF7A1A', label: 'Prepare', action: 'Be prepared' },
-  RED: { color: '#EF4444', label: 'Take Action', action: 'Act now' },
+  GREEN: { color: '#7FAF9A', label: 'Monitor', action: 'No action required' },
+  YELLOW: { color: '#D3AF37', label: 'Watch', action: 'Be updated' },
+  ORANGE: { color: '#E07A3F', label: 'Prepare', action: 'Be prepared' },
+  RED: { color: '#D4544E', label: 'Take Action', action: 'Act now' },
+};
+
+/** Brand accents, mirrored from tailwind.config.js for use in canvas/SVG contexts. */
+export const BRAND = {
+  gold: '#D3AF37',
+  sage: '#7FAF9A',
+  ink: '#D2D4D8',
+  inkDim: '#8E939D',
+  inkMute: '#686F7C',
+  hairline: '#1C2738',
+  surface: '#0E141E',
+  raised: '#131A27',
 };
 
 export const SEVERITY_ORDER = ['GREEN', 'YELLOW', 'ORANGE', 'RED'];

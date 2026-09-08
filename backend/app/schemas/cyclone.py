@@ -50,6 +50,8 @@ class Observation(BaseModel):
     est_pressure_hpa: float | None = None
     dvorak_t_number: float | None = Field(default=None, ge=0, le=8)
     radius_max_wind_km: float | None = None
+    # Holland-derived radial structure: R34/R50/R64 wind radii and closed isobars
+    wind_field: dict | None = None
     confidence: float = Field(ge=0, le=1)
     class_probabilities: dict[str, float] | None = None
     source_frame: str | None = None

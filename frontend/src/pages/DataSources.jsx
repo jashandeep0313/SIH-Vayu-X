@@ -1,4 +1,5 @@
 import { Satellite, CheckCircle2, AlertCircle } from 'lucide-react';
+import PointForecast from '../components/cyclone/PointForecast.jsx';
 import { relativeTime } from '../utils/constants.js';
 
 const CATALOGUE = {
@@ -19,15 +20,15 @@ export default function DataSources({ pipeline }) {
           <span
             className={`chip ${
               pipeline?.healthy
-                ? 'bg-severity-green/15 text-severity-green'
-                : 'bg-severity-orange/15 text-severity-orange'
+                ? 'bg-[#7FAF9A26] text-severity-green'
+                : 'bg-[#E07A3F26] text-severity-orange'
             }`}
           >
             {pipeline?.healthy ? 'Healthy' : 'Degraded'}
           </span>
         </div>
 
-        <div className="divide-y divide-line">
+        <div className="divide-y divide-hairline">
           {sources.map((s) => {
             const meta = CATALOGUE[s.id] ?? { name: s.id, provider: '—', role: '—' };
             const lagging = s.status !== 'ok';
@@ -58,6 +59,14 @@ export default function DataSources({ pipeline }) {
             );
           })}
         </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <span className="panel-title">Live Numerical Forecast</span>
+          <span className="chip bg-[#7FAF9A1F] text-sage ring-1 ring-inset ring-[#7FAF9A40]">Live</span>
+        </div>
+        <PointForecast />
       </div>
 
       <div className="panel px-4 py-3">

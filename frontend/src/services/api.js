@@ -56,10 +56,25 @@ export const imagery = {
     client.get(`/imagery/explain/${observationId}`).then((r) => r.data),
 };
 
+export const inference = {
+  upload: (file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return client
+      .post('/inference/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000,
+      })
+      .then((r) => r.data);
+  },
+};
+
 export const system = {
   version: () => client.get('/version').then((r) => r.data),
   health: () => client.get('/health').then((r) => r.data),
   pipeline: () => client.get('/pipeline/status').then((r) => r.data),
+  environmentPoint: (lat, lon, hours = 72) =>
+    client.get('/environment/point', { params: { lat, lon, hours } }).then((r) => r.data),
 };
 
 export const auth = {

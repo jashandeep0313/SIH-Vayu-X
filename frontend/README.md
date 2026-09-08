@@ -42,16 +42,49 @@ src/
 ## Design system
 
 Dark by default — these screens sit in operations rooms running continuously.
+Palette and type come from the **Prosperon** design system: navy `#1C2738`,
+sage `#7FAF9A`, gold `#D3AF37`, set in DM Sans (display) and Urbanist (body).
 
 | Token group | Purpose |
 |---|---|
-| `base` → `overlay` | Layered surfaces; depth comes from elevation, not heavy borders |
+| `canvas` → `overlay` | Layered navy surfaces; depth from elevation, not heavy outlines |
 | `ink` / `ink-dim` / `ink-mute` | Three-step text hierarchy |
-| `accent` (teal) | Brand and observed-track colour |
+| `gold` | Brand accent — active nav, focus, key affordances |
+| `sage` | Positive / healthy states |
 | `severity.*` | **Reserved for IMD warning levels.** Never decorative |
-| `CATEGORY_COLORS` | Escalating cool-to-hot ramp for intensity categories |
+| `CATEGORY_COLORS` | Slate → sage → gold → orange → red intensity ramp |
 
-Numeric columns use `.tnum` (tabular figures) so measurements align and stay scannable.
+Conventions worth keeping:
+
+- Numeric columns use `.tnum` (tabular figures) so measurements align.
+- Severity is conveyed by a **badge plus a tinted header wash**, never a coloured
+  rule down the edge of a card — the wash carries further and keeps cards flush.
+- Micro-labels use `.field-label` (uppercase, letterspaced, muted) rather than headings.
+
+## Map layers
+
+Base layers and overlays are catalogued in `src/utils/basemaps.js`; the switcher is a
+custom control (`components/map/LayerControl.jsx`) rather than Leaflet's stock one.
+**Every source is key-free.**
+
+| Layer | Source | Why it's here |
+|---|---|---|
+| Dark Canvas | Esri | Neutral default — the storm is the brightest thing on screen |
+| True Colour | NASA GIBS (MODIS Terra) | Real satellite cloud imagery for the demo date |
+| VIIRS True Colour | NASA GIBS (SNPP) | Finer detail, second daily pass |
+| Satellite | Esri World Imagery | High-resolution context near landfall |
+| Ocean | Esri | Bathymetry — pairs with ocean-heat-content discussion |
+| Street | OpenStreetMap | Settlements and roads for evacuation planning |
+| Precipitation *(overlay)* | NASA GIBS (GPM IMERG) | Rain-band structure; composites cleanly |
+
+**No IR / cloud-top overlay is included.** `MODIS_*_Brightness_Temp_Band31` and
+`MODIS_*_Cloud_Top_Temp` were both tried and rejected: they ship fixed, heavily
+saturated colour ramps built for standalone NASA Worldview viewing, and composited
+under the track they obliterate the basemap. The cyclone-relevant IR view will come
+from our own INSAT composites in `data-pipeline/`, rendered with a ramp we control.
+
+GIBS serves only to zoom 9 (some products to 6), so layers set `maxNativeZoom` —
+without it the map goes blank when zoomed past the source's limit instead of upscaling.
 
 ## Conventions
 

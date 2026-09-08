@@ -1,10 +1,11 @@
 """Liveness and version endpoints, including downstream service status."""
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.config import settings
 from app.services import demo_data
+from app.services.windy_client import WindyClient
 
 router = APIRouter()
 
@@ -39,6 +40,29 @@ async def version() -> dict:
         "team": "Vayu-X (152)",
         "demo_mode": settings.DEMO_MODE,
     }
+
+
+@router.get("/environment/point")
+async def environment_point(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    hours: int = Query(72, ge=6, le=240),
+) -> dict:
+    """Numerical-model forecast at a point, via Windy.
+
+    Independent of our satellite-derived estimate on purpose: ours comes from
+    imagery, this comes from GFS, and where they disagree that is worth seeing.
+    """
+    client = WindyClient()
+    if not client.configured:
+        raise HTTPException(
+            status_code=503,
+            detail="WINDY_POINT_API_KEY not configured",
+        )
+    try:
+        return await client.point_forecast(lat, lon, hours=hours)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Windy request failed: {exc}") from exc
 
 
 @router.get("/pipeline/status")

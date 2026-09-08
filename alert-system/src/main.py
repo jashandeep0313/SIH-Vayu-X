@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from src.rendering import render_alert
 from src.rules.engine import RuleEngine
 
 rule_engine = RuleEngine(os.getenv("ALERT_RULES_PATH", "config/alert_rules.yaml"))
@@ -59,12 +60,42 @@ async def health() -> dict:
 
 @app.post("/evaluate", tags=["alerts"])
 async def evaluate(cyclone_event: dict) -> dict:
-    """Run a CycloneEvent through the rule engine and dispatch if a rule matches.
+    """Run a CycloneEvent through the rule engine and render the alert it would send.
 
-    This is the main entry point, called by the backend on every new observation.
+    Rule matching, severity selection, cooldown and message rendering are real.
+    Geofencing and actual dispatch are still Phase 5 — nothing is delivered, and
+    the response says so. This is enough to develop and test alert copy.
+
+    Example body:
+        {"intensity_category": "VSCS", "hours_to_landfall": 30,
+         "confidence": 0.82, "cyclone_name": "MONTHA",
+         "region": "Odisha coast (Puri-Paradip)"}
     """
-    # TODO(alerts): match rules -> compute geofence -> dedup -> render -> dispatch
-    raise HTTPException(status_code=501, detail="Not implemented — Phase 5")
+    match = rule_engine.evaluate(cyclone_event)
+    if match is None:
+        return {
+            "triggered": False,
+            "reason": "no rule matched (check thresholds, or a cooldown is active)",
+            "rules_loaded": rule_engine.rule_count,
+            "event": cyclone_event,
+        }
+
+    rendered = render_alert(match, cyclone_event)
+    return {
+        "triggered": True,
+        "dry_run": os.getenv("ALERT_DRY_RUN", "true").lower() == "true",
+        "dispatch_implemented": False,
+        "note": "Rule matching and message rendering are live. Geofencing and "
+        "delivery are Phase 5 — nothing was sent.",
+        "rule": {
+            "id": match.rule_id,
+            "severity": match.severity,
+            "channels": match.channels,
+            "audience": match.audience,
+            "review_required": match.review_required,
+        },
+        "alert": rendered,
+    }
 
 
 @app.post("/dispatch", tags=["alerts"])

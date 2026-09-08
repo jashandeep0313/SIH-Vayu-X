@@ -88,7 +88,7 @@ export default function Dashboard({ live, alerts }) {
           value={hoursToLandfall != null ? Math.max(0, Math.round(hoursToLandfall)) : '—'}
           unit={hoursToLandfall != null ? 'h' : ''}
           icon={Timer}
-          accent={hoursToLandfall != null && hoursToLandfall < 36 ? '#FF7A1A' : undefined}
+          accent={hoursToLandfall != null && hoursToLandfall < 36 ? '#D3AF37' : undefined}
           sub={landfall ? landfall.region : 'No landfall forecast'}
         />
       </div>
@@ -97,17 +97,26 @@ export default function Dashboard({ live, alerts }) {
         <section className="panel overflow-hidden">
           <div className="panel-header">
             <span className="panel-title">Basin View — North Indian Ocean</span>
-            <div className="flex items-center gap-3 text-2xs text-ink-mute">
-              <LegendItem swatch={<span className="h-0.5 w-4 bg-accent" />} label="Observed" />
+            <div className="flex items-center gap-3.5 text-2xs text-ink-mute">
               <LegendItem
                 swatch={
-                  <span className="h-0.5 w-4 border-t border-dashed border-severity-orange" />
+                  <span
+                    className="h-0.5 w-5 rounded-full"
+                    style={{
+                      background:
+                        'linear-gradient(90deg,#6A9280,#94BCAB,#D3AF37,#E07A3F,#D4544E)',
+                    }}
+                  />
                 }
+                label="Observed (by category)"
+              />
+              <LegendItem
+                swatch={<span className="h-0.5 w-5 border-t border-dashed border-ink-dim" />}
                 label="Forecast"
               />
               <LegendItem
                 swatch={
-                  <span className="h-2.5 w-2.5 rounded-sm border border-dashed border-ink-mute bg-ink-mute/15" />
+                  <span className="h-2.5 w-2.5 rounded-sm border border-dashed border-ink-mute bg-[#686F7C26]" />
                 }
                 label="Uncertainty cone"
               />
@@ -154,12 +163,17 @@ export default function Dashboard({ live, alerts }) {
         <>
           {landfall && (
             <div
-              className="panel flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
-              style={{ borderLeftColor: '#FF7A1A', borderLeftWidth: 3 }}
+              className="panel flex flex-wrap items-center gap-x-8 gap-y-3 px-4 py-3"
+              style={{
+                background:
+                  'linear-gradient(90deg, rgba(224,122,63,.10) 0%, rgba(224,122,63,0) 38%)',
+              }}
             >
               <div className="flex items-center gap-2">
                 <MapPin size={14} className="text-severity-orange" />
-                <span className="text-xs font-semibold text-ink">Landfall expected</span>
+                <span className="font-display text-xs font-medium text-ink">
+                  Landfall expected
+                </span>
               </div>
               <Field label="Region" value={landfall.region} />
               <Field label="Expected (IST)" value={formatIst(landfall.expected_at)} />

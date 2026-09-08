@@ -9,7 +9,7 @@ import {
 
 function Metric({ icon: Icon, label, value, unit, sub }) {
   return (
-    <div className="rounded-md border border-line bg-raised px-3 py-2.5">
+    <div className="rounded-md border border-hairline bg-raised px-3 py-2.5">
       <div className="flex items-center gap-1.5 text-2xs text-ink-mute">
         <Icon size={11} />
         {label}
@@ -101,7 +101,7 @@ export default function ClassificationPanel({ observation }) {
                   className="h-full rounded-full"
                   style={{
                     width: `${Math.round(p * 100)}%`,
-                    backgroundColor: i === 0 ? color : '#2E3A4E',
+                    backgroundColor: i === 0 ? color : '#2B3648',
                   }}
                 />
               </div>

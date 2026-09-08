@@ -48,7 +48,7 @@ export function SeverityBadge({ severity }) {
 export function StatusPill({ status }) {
   const tone =
     status === 'active'
-      ? 'text-accent'
+      ? 'text-gold'
       : status === 'weakened'
         ? 'text-ink-dim'
         : 'text-ink-mute';
@@ -64,7 +64,7 @@ export function ConfidenceBar({ value, showLabel = true }) {
   if (value == null) return null;
 
   const pct = Math.round(value * 100);
-  const color = value >= 0.8 ? '#22C55E' : value >= 0.6 ? '#F5B301' : '#FF7A1A';
+  const color = value >= 0.8 ? '#7FAF9A' : value >= 0.6 ? '#D3AF37' : '#E07A3F';
 
   return (
     <div className="flex items-center gap-2">

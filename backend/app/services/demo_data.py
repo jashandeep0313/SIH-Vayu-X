@@ -12,6 +12,8 @@ import math
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from app.services.wind_field import wind_field
+
 EARTH_RADIUS_KM = 6371.0
 KM_PER_DEG_LAT = 111.32
 
@@ -147,6 +149,8 @@ def _make_track(
         wind = max(15.0, start_wind + wind_step * i)
         lat = start_lat + d_lat * i + curvature * (i**2) * 0.01
         lon = start_lon + d_lon * i - curvature * (i**2) * 0.008
+        pressure = _pressure_for(wind)
+        rmw = round(max(15.0, 70 - wind * 0.35), 1)
 
         observations.append(
             {
@@ -156,9 +160,10 @@ def _make_track(
                 "pattern_type": _pattern_for(wind),
                 "intensity_category": wind_to_category(wind),
                 "est_wind_kt": round(wind, 1),
-                "est_pressure_hpa": _pressure_for(wind),
+                "est_pressure_hpa": pressure,
                 "dvorak_t_number": _t_number(wind),
-                "radius_max_wind_km": round(max(15.0, 70 - wind * 0.35), 1),
+                "radius_max_wind_km": rmw,
+                "wind_field": wind_field(wind, pressure, rmw),
                 "confidence": round(min(0.96, 0.68 + i * 0.02), 2),
                 "class_probabilities": _class_probabilities(wind),
                 "source_frame": f"insat3d_tir1_{observed_at:%Y%m%dT%H%M}Z",

@@ -25,7 +25,7 @@ function ChartTooltip({ active, payload, label }) {
   const point = payload[0].payload;
 
   return (
-    <div className="rounded-md border border-line-strong bg-raised px-2.5 py-2 shadow-panel">
+    <div className="rounded-md border border-hairline-strong bg-raised px-2.5 py-2 shadow-panel">
       <div className="tnum text-2xs text-ink-mute">{formatUtc(label)}</div>
       {point.observed != null && (
         <div className="tnum text-xs text-ink">
@@ -33,7 +33,7 @@ function ChartTooltip({ active, payload, label }) {
         </div>
       )}
       {point.forecast != null && (
-        <div className="tnum text-xs" style={{ color: '#FF7A1A' }}>
+        <div className="tnum text-xs" style={{ color: '#D3AF37' }}>
           Forecast <span className="font-semibold">{Math.round(point.forecast)} kt</span>
           {point.spread != null && (
             <span className="ml-1 text-ink-mute">±{Math.round(point.spread)}</span>
@@ -91,7 +91,7 @@ export default function IntensityChart({ observations = [], forecast }) {
   return (
     <ResponsiveContainer width="100%" height={230}>
       <ComposedChart data={data} margin={{ top: 8, right: 44, bottom: 4, left: -18 }}>
-        <CartesianGrid stroke="#212B3C" strokeDasharray="2 4" vertical={false} />
+        <CartesianGrid stroke="#1C2738" strokeDasharray="2 4" vertical={false} />
 
         {THRESHOLDS.filter((t) => t.kt < maxWind + 12).map((t) => (
           <ReferenceLine
@@ -113,9 +113,9 @@ export default function IntensityChart({ observations = [], forecast }) {
         {nowTs && (
           <ReferenceLine
             x={nowTs}
-            stroke="#5B6A80"
+            stroke="#686F7C"
             strokeDasharray="3 3"
-            label={{ value: 'now', position: 'top', fill: '#5B6A80', fontSize: 9 }}
+            label={{ value: 'now', position: 'top', fill: '#686F7C', fontSize: 9 }}
           />
         )}
 
@@ -124,29 +124,29 @@ export default function IntensityChart({ observations = [], forecast }) {
           type="number"
           domain={['dataMin', 'dataMax']}
           scale="time"
-          tick={{ fill: '#5B6A80', fontSize: 10 }}
+          tick={{ fill: '#686F7C', fontSize: 10 }}
           tickFormatter={(t) => formatUtc(new Date(t).toISOString(), { timeOnly: true })}
-          stroke="#212B3C"
+          stroke="#1C2738"
         />
         <YAxis
-          tick={{ fill: '#5B6A80', fontSize: 10 }}
-          stroke="#212B3C"
+          tick={{ fill: '#686F7C', fontSize: 10 }}
+          stroke="#1C2738"
           width={44}
           label={{
             value: 'kt',
             angle: 0,
             position: 'insideTopLeft',
-            fill: '#5B6A80',
+            fill: '#686F7C',
             fontSize: 10,
             offset: 12,
           }}
         />
-        <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#2E3A4E' }} />
+        <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#2B3648' }} />
 
         <Area
           dataKey="band"
           stroke="none"
-          fill="#FF7A1A"
+          fill="#D3AF37"
           fillOpacity={0.12}
           isAnimationActive={false}
           connectNulls
@@ -154,18 +154,18 @@ export default function IntensityChart({ observations = [], forecast }) {
         <Line
           type="monotone"
           dataKey="observed"
-          stroke="#2DD4BF"
+          stroke="#7FAF9A"
           strokeWidth={2}
-          dot={{ r: 2, fill: '#2DD4BF', strokeWidth: 0 }}
+          dot={{ r: 2, fill: '#7FAF9A', strokeWidth: 0 }}
           isAnimationActive={false}
         />
         <Line
           type="monotone"
           dataKey="forecast"
-          stroke="#FF7A1A"
+          stroke="#D3AF37"
           strokeWidth={2}
           strokeDasharray="5 4"
-          dot={{ r: 2.5, fill: '#0E1420', stroke: '#FF7A1A', strokeWidth: 1.5 }}
+          dot={{ r: 2.5, fill: '#0E141E', stroke: '#D3AF37', strokeWidth: 1.5 }}
           isAnimationActive={false}
           connectNulls
         />
