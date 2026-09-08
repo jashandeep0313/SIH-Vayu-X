@@ -1,0 +1,138 @@
+# =============================================================================
+# Vayu-X — Alert rules
+#
+# Rules are DATA, not code: meteorologists tune thresholds here without a
+# redeploy, and POST /rules/reload picks them up live.
+#
+# Severity is a function of intensity x proximity x time-to-landfall x confidence —
+# never intensity alone. A SuCS heading out to sea is not a red alert.
+#
+# See docs/alerting.md
+# =============================================================================
+
+defaults:
+  min_confidence: 0.65          # below this, route to analyst review, never auto-dispatch
+  dedup_window_minutes: 30
+  languages: [en, hi]
+  dry_run_channels: []          # channels forced to log-only regardless of ALERT_DRY_RUN
+
+rules:
+  # ------------------------------------------------------------- RED (act now)
+  - id: escs_landfall_24h
+    description: ESCS or Super Cyclone forecast to make landfall within 24 hours
+    severity: RED
+    conditions:
+      intensity_category: [ESCS, SuCS]
+      hours_to_landfall: { max: 24 }
+      min_confidence: 0.70
+    channels: [sms, email, push, webhook]
+    audience: [district_admin, responder, citizen, analyst]
+    cooldown_minutes: 60
+    recommended_actions:
+      - "Move immediately to the nearest designated cyclone shelter"
+      - "Do not venture into the sea; fishermen must return to harbour"
+      - "Keep emergency kit, documents and medicines ready"
+      - "Follow only official IMD/NDMA instructions"
+
+  - id: vscs_landfall_12h
+    description: VSCS making landfall within 12 hours
+    severity: RED
+    conditions:
+      intensity_category: [VSCS, ESCS, SuCS]
+      hours_to_landfall: { max: 12 }
+      min_confidence: 0.65
+    channels: [sms, email, push, webhook]
+    audience: [district_admin, responder, citizen, analyst]
+    cooldown_minutes: 60
+
+  # -------------------------------------------------------- ORANGE (prepare)
+  - id: vscs_landfall_36h
+    description: VSCS or stronger forecast to make landfall within 36 hours
+    severity: ORANGE
+    conditions:
+      intensity_category: [VSCS, ESCS, SuCS]
+      hours_to_landfall: { max: 36 }
+      min_confidence: 0.70
+    channels: [sms, email, push, webhook]
+    audience: [district_admin, responder, citizen]
+    cooldown_minutes: 180
+    recommended_actions:
+      - "Prepare to evacuate low-lying and coastal areas"
+      - "Secure loose objects, livestock and fishing boats"
+      - "Charge phones and store drinking water"
+
+  - id: rapid_intensification_risk
+    description: High probability of rapid intensification near the coast
+    severity: ORANGE
+    conditions:
+      rapid_intensification_risk: { min: 0.60 }
+      distance_to_coast_km: { max: 500 }
+      min_confidence: 0.65
+    channels: [email, push, webhook]
+    audience: [district_admin, responder, analyst]
+    cooldown_minutes: 240
+    note: >
+      Rapid intensification is where automated systems add the most value —
+      a storm can jump two categories faster than manual analysis cycles.
+
+  # ---------------------------------------------------------- YELLOW (watch)
+  - id: cs_approaching_72h
+    description: Cyclonic Storm within 72 hours of the coast
+    severity: YELLOW
+    conditions:
+      intensity_category: [CS, SCS, VSCS, ESCS, SuCS]
+      hours_to_landfall: { max: 72 }
+      min_confidence: 0.60
+    channels: [email, push]
+    audience: [district_admin, analyst]
+    cooldown_minutes: 360
+    recommended_actions:
+      - "Monitor official updates"
+      - "Fishermen advised not to venture into the sea"
+
+  - id: intensification_trend
+    description: System intensifying by two or more categories in 24 hours
+    severity: YELLOW
+    conditions:
+      category_increase_24h: { min: 2 }
+      min_confidence: 0.60
+    channels: [email, push]
+    audience: [analyst, district_admin]
+    cooldown_minutes: 360
+
+  # ------------------------------------------------------- GREEN (monitor)
+  - id: depression_formed
+    description: New depression identified in the basin
+    severity: GREEN
+    conditions:
+      intensity_category: [D, DD]
+      min_confidence: 0.55
+    channels: [email]
+    audience: [analyst]
+    cooldown_minutes: 720
+
+  # ------------------------------------------------- low-confidence handling
+  - id: low_confidence_review
+    description: Significant system detected but below the auto-dispatch confidence gate
+    severity: GREEN
+    conditions:
+      intensity_category: [SCS, VSCS, ESCS, SuCS]
+      confidence: { max: 0.65 }
+    channels: [email]
+    audience: [analyst]
+    review_required: true        # queues for human approval, never auto-dispatches publicly
+    cooldown_minutes: 60
+
+# ---------------------------------------------------------------- escalation
+escalation:
+  # Re-alert only when severity increases. Repeating the same warning trains
+  # people to ignore it.
+  on_severity_increase: true
+  on_same_severity: false
+  all_clear_on_downgrade: true   # send an all-clear when the threat passes
+
+# ----------------------------------------------------------------- geofence
+geofence:
+  buffer_km: 100                 # buffer around the forecast cone
+  admin_boundaries: data/external/india_districts.geojson
+  min_intersection_area_km2: 25  # ignore slivers

@@ -1,0 +1,35 @@
+# ---- Web framework ----
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# ---- Channels ----
+twilio==9.4.1
+aiosmtplib==3.0.2
+firebase-admin==6.6.0
+httpx==0.28.1
+
+# ---- Templating ----
+jinja2==3.1.5
+
+# ---- Geospatial (geofencing) ----
+shapely==2.0.6
+geopandas==1.0.1
+pyproj==3.7.0
+
+# ---- Storage / state ----
+redis==5.2.1
+sqlalchemy==2.0.36
+psycopg[binary]==3.2.3
+
+# ---- Utils ----
+pyyaml==6.0.2
+python-dotenv==1.0.1
+tenacity==9.0.0
+structlog==24.4.0
+
+# ---- Dev / test ----
+pytest==8.3.4
+pytest-asyncio==0.25.0
+ruff==0.8.4

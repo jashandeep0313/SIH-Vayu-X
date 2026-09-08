@@ -1,0 +1,152 @@
+name: vayux
+
+services:
+  # ---------------------------------------------------------------- database
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    container_name: vayux-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vayux}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-vayux}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/home/postgres/pgdata/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vayux}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ------------------------------------------------------- cache / pub-sub
+  redis:
+    image: redis:7-alpine
+    container_name: vayux-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------- object storage
+  minio:
+    image: minio/minio:latest
+    container_name: vayux-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-change-me}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ------------------------------------------------------------ API gateway
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vayux-backend
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ------------------------------------------------------- model inference
+  ai-model:
+    build:
+      context: ./ai-model
+      dockerfile: Dockerfile
+    container_name: vayux-ai-model
+    env_file: .env
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai-model:/app
+      - modelcache:/app/models/checkpoints
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: uvicorn src.serve.app:app --host 0.0.0.0 --port 8001 --reload
+
+  # ---------------------------------------------------------- alert system
+  alert-system:
+    build:
+      context: ./alert-system
+      dockerfile: Dockerfile
+    container_name: vayux-alert-system
+    env_file: .env
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./alert-system:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
+
+  # ---------------------------------------------------------- data pipeline
+  data-pipeline:
+    build:
+      context: ./data-pipeline
+      dockerfile: Dockerfile
+    container_name: vayux-data-pipeline
+    env_file: .env
+    volumes:
+      - ./data-pipeline:/app
+      - ./ai-model/data:/data
+    depends_on:
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: python -m src.scheduler
+
+  # --------------------------------------------------------------- frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: vayux-frontend
+    env_file: .env
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  modelcache:
+
+networks:
+  default:
+    name: vayux-net

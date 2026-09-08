@@ -1,0 +1,50 @@
+# Shared Python tooling config for backend/, ai-model/, alert-system/, data-pipeline/.
+# Each service keeps its own requirements.txt; lint/format rules are common.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.ipynb_checkpoints",
+    "ai-model/data",
+    "ai-model/models",
+    "ai-model/experiments",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # comprehensions
+    "UP",   # pyupgrade
+    "ARG",  # unused arguments
+    "SIM",  # simplify
+]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B008",    # FastAPI Depends() in defaults is the idiomatic pattern
+    "ARG001",  # unused args are common in route stubs and interface methods
+    "ARG002",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["ARG", "S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+filterwarnings = ["ignore::DeprecationWarning"]

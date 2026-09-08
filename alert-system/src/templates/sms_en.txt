@@ -1,0 +1,1 @@
+{{severity}} ALERT: {{category_full}} near {{region}} by {{eta}}. Winds {{wind_kmph}} kmph. {{primary_action}}. Follow IMD/NDMA updates.

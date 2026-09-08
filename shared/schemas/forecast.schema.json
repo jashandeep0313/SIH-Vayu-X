@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vayux.sih/schemas/forecast.schema.json",
+  "title": "Forecast",
+  "description": "A track and intensity forecast issued for a cyclone event at a point in time. Forecasts are immutable once issued — a new forecast is a new object, which is what makes retrospective verification possible.",
+  "type": "object",
+  "required": ["cyclone_id", "issued_at", "model_version", "points"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "cyclone_id": { "type": "string", "format": "uuid" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "model_version": {
+      "type": "string",
+      "description": "Checkpoint identifier, e.g. 'track_convlstm_v1'. Required for reproducibility and verification."
+    },
+    "points": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/forecastPoint" }
+    },
+    "landfall_estimate": {
+      "type": ["object", "null"],
+      "properties": {
+        "expected_at": { "type": "string", "format": "date-time" },
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+        "region": {
+          "type": "string",
+          "description": "Human-readable coastal stretch, e.g. 'Odisha coast (Puri-Paradip)'."
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "cone_geojson": {
+      "type": ["object", "null"],
+      "description": "GeoJSON Polygon of the cone of uncertainty, derived from the per-point uncertainty radii. Used directly by the dashboard and by alert geofencing."
+    },
+    "environment_inputs": {
+      "type": "object",
+      "description": "Environmental predictors used for this forecast — recorded so a forecast can be explained after the fact.",
+      "properties": {
+        "sst_c": { "type": "number" },
+        "shear_kt": { "type": "number" },
+        "rh_mid_pct": { "type": "number" },
+        "vorticity_850": { "type": "number" },
+        "steering_u": { "type": "number" },
+        "steering_v": { "type": "number" },
+        "ocean_heat_content": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "rapid_intensification_risk": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Probability of rapid intensification (>=30 kt increase) in the next 24 hours."
+    }
+  },
+  "$defs": {
+    "forecastPoint": {
+      "type": "object",
+      "required": ["lead_hours", "valid_at", "lat", "lon"],
+      "properties": {
+        "lead_hours": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Hours ahead of issue time. Standard set: 6, 12, 24, 48, 72."
+        },
+        "valid_at": { "type": "string", "format": "date-time" },
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+        "est_wind_kt": { "type": "number", "minimum": 0 },
+        "est_pressure_hpa": { "type": "number" },
+        "intensity_category": {
+          "type": "string",
+          "enum": ["LPA", "D", "DD", "CS", "SCS", "VSCS", "ESCS", "SuCS"]
+        },
+        "radius_uncertainty_km": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Positional uncertainty radius. Grows with lead time and becomes the cone of uncertainty."
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

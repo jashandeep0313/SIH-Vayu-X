@@ -1,0 +1,140 @@
+# =============================================================================
+# Vayu-X — Satellite data source registry
+#
+# Adding a new satellite = one entry here + one fetcher class implementing
+# BaseFetcher. Nothing else in the system changes.
+#
+# See docs/data-sources.md
+# =============================================================================
+
+region:
+  name: North Indian Ocean
+  bbox:
+    lat_min: 0.0
+    lat_max: 30.0
+    lon_min: 55.0
+    lon_max: 100.0
+
+sources:
+  # ------------------------------------------------- primary imagery (ISRO)
+  - id: insat3d
+    name: INSAT-3D
+    fetcher: InsatFetcher
+    provider: MOSDAC
+    base_url: https://www.mosdac.gov.in
+    auth: { username_env: MOSDAC_USERNAME, password_env: MOSDAC_PASSWORD }
+    products: [3DIMG_L1B_STD]
+    channels: [TIR1, TIR2, WV, MIR, VIS, SWIR]
+    cadence_minutes: 30
+    format: hdf5
+    priority: 1
+    enabled: true
+
+  - id: insat3dr
+    name: INSAT-3DR
+    fetcher: InsatFetcher
+    provider: MOSDAC
+    base_url: https://www.mosdac.gov.in
+    auth: { username_env: MOSDAC_USERNAME, password_env: MOSDAC_PASSWORD }
+    products: [3RIMG_L1B_STD]
+    channels: [TIR1, TIR2, WV, MIR, VIS, SWIR]
+    cadence_minutes: 30
+    format: hdf5
+    priority: 1
+    enabled: true
+    note: Staggered with 3D — combined effective cadence is ~15 min
+
+  # ------------------------------------------------------ ocean surface wind
+  - id: scatsat1
+    name: SCATSAT-1
+    fetcher: ScatterometerFetcher
+    provider: MOSDAC
+    auth: { username_env: MOSDAC_USERNAME, password_env: MOSDAC_PASSWORD }
+    products: [L2B_wind_vectors]
+    resolution_km: 25
+    cadence_minutes: 720
+    format: netcdf
+    priority: 2
+    enabled: true
+
+  - id: ascat
+    name: ASCAT (METOP)
+    fetcher: ScatterometerFetcher
+    provider: EUMETSAT
+    products: [ascat_coastal_winds]
+    resolution_km: 12.5
+    cadence_minutes: 720
+    format: netcdf
+    priority: 2
+    enabled: false
+
+  # ------------------------------------------------------------ precipitation
+  - id: imerg
+    name: GPM IMERG
+    fetcher: ImergFetcher
+    provider: NASA_EARTHDATA
+    base_url: https://gpm1.gesdisc.eosdis.nasa.gov
+    auth: { username_env: EARTHDATA_USERNAME, password_env: EARTHDATA_PASSWORD }
+    products: [GPM_3IMERGHH]
+    resolution_deg: 0.1
+    cadence_minutes: 30
+    format: hdf5
+    priority: 3
+    enabled: false
+
+  # ------------------------------------------- environmental predictors (ERA5)
+  - id: era5
+    name: ERA5 Reanalysis
+    fetcher: Era5Fetcher
+    provider: COPERNICUS_CDS
+    auth: { api_key_env: CDS_API_KEY }
+    variables:
+      - sea_surface_temperature
+      - u_component_of_wind        # 200 & 850 hPa -> vertical shear
+      - v_component_of_wind
+      - relative_humidity          # mid-level
+      - vorticity                  # 850 hPa
+    pressure_levels: [200, 500, 850]
+    cadence_minutes: 60
+    format: netcdf
+    priority: 2
+    enabled: true
+    note: Reanalysis lags real time — use forecast fields operationally, ERA5 for training
+
+  # ----------------------------------------------------- ground truth labels
+  - id: imd_best_track
+    name: IMD Best Track (RSMC New Delhi)
+    fetcher: BestTrackFetcher
+    provider: IMD
+    base_url: https://rsmcnewdelhi.imd.gov.in
+    cadence_minutes: 180
+    format: csv
+    priority: 1
+    enabled: true
+    note: Primary training labels — the standard our output is judged against
+
+  - id: ibtracs
+    name: IBTrACS Global Best Track
+    fetcher: BestTrackFetcher
+    provider: NOAA_NCEI
+    base_url: https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs
+    format: csv
+    priority: 3
+    enabled: true
+    note: Global archive — used for pre-training before fine-tuning on North Indian Ocean
+
+# ---------------------------------------------------------------- scheduling
+schedule:
+  cron: "*/30 * * * *"
+  lookback_hours: 6
+  max_retries: 3
+  retry_backoff_seconds: 60
+  parallel_downloads: 4
+
+# ------------------------------------------------------------------- storage
+storage:
+  raw_prefix: s3://vayux-raw
+  processed_prefix: s3://vayux-processed
+  local_raw: /data/raw
+  local_processed: /data/processed
+  retain_raw_days: 30

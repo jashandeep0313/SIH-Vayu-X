@@ -1,0 +1,118 @@
+# =============================================================================
+# Vayu-X — base training configuration
+# Every run is fully described by a config file. Override per experiment:
+#   python -m src.training.train --config configs/classifier.yaml
+# =============================================================================
+
+project: vayux
+seed: 42
+device: cuda            # cuda | cpu | mps
+
+# ---------------------------------------------------------------- data
+data:
+  root: data/processed
+  raw_root: data/raw
+  external_root: data/external
+
+  # North Indian Ocean domain
+  bbox:
+    lat_min: 0.0
+    lat_max: 30.0
+    lon_min: 55.0
+    lon_max: 100.0
+
+  channels: [TIR1, TIR2, WV, MIR]   # VIS added only for daytime samples
+  image_size: 256                   # full-frame tile size (identification)
+  crop_size: 224                    # storm-centred crop (classification)
+  sequence_length: 8                # past frames fed to the prediction model
+  forecast_leads: [6, 12, 24, 48, 72]   # hours
+
+  # Chronological splits — never random. Adjacent frames of the same storm are
+  # near-duplicates, so a random split leaks and inflates scores.
+  split:
+    train_years: [2010, 2019]
+    val_years: [2020, 2021]
+    test_years: [2022, 2024]
+  holdout_cases: [Amphan, Fani, Biparjoy, Tauktae]
+
+  normalization:
+    brightness_temp_min: 180.0      # K
+    brightness_temp_max: 320.0      # K
+
+  augmentation:
+    horizontal_flip: 0.5
+    vertical_flip: 0.5
+    rotation_degrees: 180           # cyclones have no canonical orientation
+    brightness_jitter: 0.1
+    enabled: true
+
+# ---------------------------------------------------------------- model
+model:
+  task: classification              # identification | classification | prediction
+  backbone: resnet50                # resnet50 | efficientnet_b3 | vit_base
+  pretrained: true
+  dropout: 0.3
+
+  identification:
+    head: centernet                 # centre-point heatmap regression
+    heatmap_stride: 4
+    min_confidence: 0.65
+
+  classification:
+    pattern_classes: [curved_band, shear, CDO, banding_eye, eye, central_cold_cover]
+    intensity_classes: [LPA, D, DD, CS, SCS, VSCS, ESCS, SuCS]
+    regress_wind: true
+    regress_pressure: true
+    regress_t_number: true
+
+  prediction:
+    architecture: convlstm          # convlstm | spatiotemporal_transformer
+    hidden_channels: [64, 64, 128]
+    use_environment_features: true
+    environment_features: [sst_c, shear_kt, rh_mid_pct, vorticity_850, steering_u, steering_v]
+    uncertainty: mc_dropout         # mc_dropout | ensemble | none
+    mc_samples: 20
+
+# ---------------------------------------------------------------- training
+training:
+  epochs: 60
+  batch_size: 32
+  num_workers: 4
+  optimizer: adamw
+  learning_rate: 3.0e-4
+  weight_decay: 1.0e-4
+  scheduler: cosine
+  warmup_epochs: 3
+  mixed_precision: true
+  gradient_clip: 1.0
+  early_stopping_patience: 10
+
+  loss_weights:                     # multi-task weighting
+    pattern: 1.0
+    intensity: 1.0
+    wind: 0.5
+    pressure: 0.3
+
+  # SuCS events are rare; without this the model ignores the cases that matter most.
+  class_balancing: weighted         # weighted | oversample | none
+
+# ---------------------------------------------------------------- evaluation
+evaluation:
+  metrics:
+    identification: [pod, far, csi, mean_center_error_km]
+    classification: [accuracy, macro_f1, wind_rmse_kt, pressure_mae_hpa]
+    prediction: [track_error_km, intensity_mae_kt, skill_vs_persistence]
+  baselines: [persistence, cliper]
+  ground_truth: imd_best_track
+
+# ---------------------------------------------------------------- output
+output:
+  checkpoint_dir: models/checkpoints
+  experiment_dir: experiments
+  log_every_n_steps: 50
+  save_top_k: 3
+  export_onnx: true
+
+tracking:
+  backend: mlflow                   # mlflow | wandb | none
+  experiment_name: vayux-cyclone

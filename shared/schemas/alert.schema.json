@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vayux.sih/schemas/alert.schema.json",
+  "title": "Alert",
+  "description": "A graded, geofenced cyclone warning and its per-channel dispatch record. Shaped to be convertible to Common Alerting Protocol (CAP) for interoperability with government warning infrastructure.",
+  "type": "object",
+  "required": ["id", "cyclone_id", "severity", "headline", "issued_at", "channels"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "cyclone_id": { "type": "string", "format": "uuid" },
+    "severity": {
+      "type": "string",
+      "enum": ["GREEN", "YELLOW", "ORANGE", "RED"],
+      "description": "IMD colour-coded warning level. GREEN=monitor, YELLOW=watch, ORANGE=prepare, RED=take action."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["issued", "escalated", "acknowledged", "cancelled", "expired", "pending_review"],
+      "default": "issued",
+      "description": "'pending_review' means model confidence was below threshold and a human must approve dispatch."
+    },
+    "headline": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "One-line action-first summary, e.g. 'VSCS expected to cross Odisha coast within 36 hours'."
+    },
+    "body": {
+      "type": "string",
+      "description": "Full message text for email/push. Leads with recommended action."
+    },
+    "matched_rule": {
+      "type": "string",
+      "description": "Rule id from alert_rules.yaml that triggered this alert — the audit trail's starting point."
+    },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "valid_from": { "type": "string", "format": "date-time" },
+    "valid_until": { "type": "string", "format": "date-time" },
+    "geofence": {
+      "type": "object",
+      "description": "GeoJSON Polygon/MultiPolygon of the alerted area (forecast cone buffered by wind radius, intersected with administrative boundaries)."
+    },
+    "affected_regions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Resolved district/taluk names, e.g. ['Puri','Khordha','Jagatsinghpur']."
+    },
+    "expected_landfall": {
+      "type": ["object", "null"],
+      "properties": {
+        "expected_at": { "type": "string", "format": "date-time" },
+        "region": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "intensity_summary": {
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "max_wind_kt": { "type": "number" },
+        "max_wind_kmph": { "type": "number" }
+      }
+    },
+    "recommended_actions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Plain-language instructions, e.g. 'Move to designated shelters', 'Do not venture into the sea'."
+    },
+    "channels": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["sms", "email", "push", "webhook", "ivr"] }
+    },
+    "audience": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["analyst", "district_admin", "responder", "citizen"]
+      }
+    },
+    "languages": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Language codes the message was rendered in, e.g. ['en','hi','or']."
+    },
+    "dispatches": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dispatch" }
+    },
+    "acknowledgements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "acknowledged_by": { "type": "string" },
+          "acknowledged_at": { "type": "string", "format": "date-time" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "supersedes": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Id of the alert this one upgrades or replaces."
+    },
+    "issued_by": {
+      "type": "string",
+      "description": "'system' for automatic dispatch, or the analyst's user id for a manual/overridden alert."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when ALERT_DRY_RUN is set — the alert was generated and logged but not actually delivered."
+    }
+  },
+  "$defs": {
+    "dispatch": {
+      "type": "object",
+      "required": ["channel", "status"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "channel": { "type": "string", "enum": ["sms", "email", "push", "webhook", "ivr"] },
+        "recipient_count": { "type": "integer", "minimum": 0 },
+        "status": {
+          "type": "string",
+          "enum": ["queued", "sending", "sent", "partial", "failed", "skipped"]
+        },
+        "sent_at": { "type": ["string", "null"], "format": "date-time" },
+        "attempts": { "type": "integer", "minimum": 0 },
+        "provider_message_id": { "type": ["string", "null"] },
+        "error": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
