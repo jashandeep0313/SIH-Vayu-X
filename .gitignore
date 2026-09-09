@@ -142,3 +142,10 @@ redis-data/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---------- Test images ----------
+# Wide-area GIBS frames are ~1 MB each and regenerable:
+#   python scripts/fetch_test_images.py
+# The small in-domain samples ARE committed — they carry ground truth in the
+# filename and are what the intensity model actually expects as input.
+data/test_images/*.png

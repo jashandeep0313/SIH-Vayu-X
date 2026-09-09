@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     # satellite feeds. Every demo payload is tagged synthetic.
     DEMO_MODE: bool = True
 
+    # Where cyclone events come from:
+    #   "ibtracs"   real historical storms replayed from best-track data
+    #   "synthetic" generated demo events (no data files needed)
+    DATA_SOURCE: str = "ibtracs"
+    IBTRACS_PATH: str = "../ai-model/data/raw/ibtracs/ibtracs_NI_v04r01.csv"
+    REPLAY_STORM_COUNT: int = 4
+    REPLAY_MIN_SEASON: int = 2021  # held out from model training
+
     # Database
     DATABASE_URL: str = "postgresql+psycopg://vayux:change-me@localhost:5432/vayux"
 

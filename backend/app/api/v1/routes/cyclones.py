@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.core.config import settings
 from app.schemas.cyclone import CycloneEvent, CycloneListResponse
-from app.services import demo_data
+from app.services import event_source
 
 router = APIRouter()
 
@@ -35,7 +35,7 @@ async def list_cyclones(
         # TODO(backend): query PostGIS with the supplied filters
         raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
 
-    items = demo_data.summaries()
+    items = event_source.summaries()
     if status:
         items = [i for i in items if i["status"] == status]
     return CycloneListResponse(
@@ -50,7 +50,7 @@ async def list_active_cyclones() -> CycloneListResponse:
         # TODO(backend): SELECT ... WHERE status = 'active'
         raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
 
-    items = demo_data.summaries()
+    items = event_source.summaries()
     return CycloneListResponse(count=len(items), items=items)
 
 
@@ -61,7 +61,7 @@ async def get_cyclone(cyclone_id: UUID) -> CycloneEvent:
         # TODO(backend): fetch event + observations + latest forecast
         raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
 
-    event = demo_data.event_by_id(cyclone_id)
+    event = event_source.event_by_id(cyclone_id)
     if event is None:
         raise HTTPException(status_code=404, detail=f"No cyclone event with id {cyclone_id}")
     return CycloneEvent(**event)
@@ -74,7 +74,7 @@ async def get_track(cyclone_id: UUID) -> dict:
         # TODO(backend): build LineString from ordered observations
         raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
 
-    event = demo_data.event_by_id(cyclone_id)
+    event = event_source.event_by_id(cyclone_id)
     if event is None:
         raise HTTPException(status_code=404, detail=f"No cyclone event with id {cyclone_id}")
     return {
@@ -97,7 +97,7 @@ async def get_observations(
         # TODO(backend): query TimescaleDB hypertable
         raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
 
-    event = demo_data.event_by_id(cyclone_id)
+    event = event_source.event_by_id(cyclone_id)
     if event is None:
         raise HTTPException(status_code=404, detail=f"No cyclone event with id {cyclone_id}")
     items = event["observations"][-limit:]

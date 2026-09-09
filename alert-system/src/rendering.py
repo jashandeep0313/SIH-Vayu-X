@@ -50,23 +50,28 @@ def render_alert(match, event: dict) -> dict:
     wind_kt = event.get("est_wind_kt")
     wind_kmph = round(wind_kt * KT_TO_KMPH) if wind_kt else None
 
-    eta = _ist(now + timedelta(hours=hours)) if hours is not None else "shortly"
-    primary_action = (match.recommended_actions or ["Follow official updates"])[0]
+    FALLBACK_ACTION = "Follow official updates"
+    eta = _ist(now + timedelta(hours=hours)) if hours is not None else None
+    primary_action = (match.recommended_actions or [FALLBACK_ACTION])[0]
 
     if hours is not None:
         headline = f"{category_name} expected to cross {region} within {int(hours)} hours"
     else:
         headline = f"{category_name} identified — {region}"
 
+    # Build the SMS from parts so an absent ETA doesn't read as "by shortly",
+    # and the sign-off isn't repeated when it is already the primary action.
+    when = f" by {eta}" if eta else ""
     wind_clause = f" Winds {wind_kmph} kmph." if wind_kmph else ""
+    sign_off = "" if primary_action == FALLBACK_ACTION else f" {FALLBACK_ACTION}."
     sms = truncate_for_sms(
-        f"IMD/Vayu-X {match.severity} ALERT: {category_name} near {region} by {eta}."
-        f"{wind_clause} {primary_action}. Follow official updates."
+        f"IMD/Vayu-X {match.severity} ALERT: {category_name} near {region}{when}."
+        f"{wind_clause} {primary_action}.{sign_off}"
     )
 
     body = (
         f"{name} is forecast to affect {region}"
-        + (f" around {eta}" if hours is not None else "")
+        + (f" around {eta}" if eta else "")
         + (f", with sustained winds of {wind_kmph} kmph" if wind_kmph else "")
         + f". {SEVERITY_ACTION.get(match.severity, '')}."
     )
@@ -86,7 +91,7 @@ def render_alert(match, event: dict) -> dict:
             "sms": {"text": sms, "length": len(sms), "segments": 1},
             "push": {
                 "title": f"{match.severity} · {category_name}",
-                "body": f"{region} · {eta}. {primary_action}.",
+                "body": (f"{region}" + (f" · {eta}" if eta else "") + f". {primary_action}."),
             },
             "email": {
                 "subject": f"[{match.severity}] {headline}",

@@ -4,7 +4,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.config import settings
-from app.services import demo_data
+from app.services import demo_data, event_source
 from app.services.windy_client import WindyClient
 
 router = APIRouter()
@@ -39,6 +39,7 @@ async def version() -> dict:
         "problem_statement": "26070",
         "team": "Vayu-X (152)",
         "demo_mode": settings.DEMO_MODE,
+        "data_source": event_source.describe(),
     }
 
 

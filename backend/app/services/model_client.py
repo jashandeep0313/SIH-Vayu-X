@@ -48,10 +48,23 @@ class ModelServiceClient:
     async def classify(self, crop_uri: str) -> dict:
         return await self._post("/classify", {"crop_uri": crop_uri})
 
-    async def predict(self, sequence_uris: list[str], environment: dict) -> dict:
-        return await self._post(
-            "/predict", {"sequence_uris": sequence_uris, "environment": environment}
-        )
+    async def predict_track(self, observations: list[dict]) -> dict:
+        """Forecast track and intensity from an observed history.
+
+        Sends only the fields the trained model uses; observations carry a lot
+        more than that and the service rejects unknown keys.
+        """
+        payload = [
+            {
+                "observed_at": o["observed_at"],
+                "lat": o["lat"],
+                "lon": o["lon"],
+                "est_wind_kt": o["est_wind_kt"],
+                "est_pressure_hpa": o.get("est_pressure_hpa"),
+            }
+            for o in observations
+        ]
+        return await self._post("/predict", {"observations": payload})
 
     async def health(self) -> dict:
         async with httpx.AsyncClient(timeout=5.0) as client:

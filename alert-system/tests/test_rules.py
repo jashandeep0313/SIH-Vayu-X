@@ -92,3 +92,55 @@ def test_severity_ordering_is_total():
         > SEVERITY_ORDER["YELLOW"]
         > SEVERITY_ORDER["GREEN"]
     )
+
+
+def test_min_confidence_is_a_threshold_not_a_field(tmp_path):
+    """`min_confidence` gates on the event's `confidence`.
+
+    Regression: it was previously compared as a literal field named
+    `min_confidence`, which no event carries — so every rule using it silently
+    never fired, disabling the entire alert system.
+    """
+    rules = tmp_path / "r.yaml"
+    rules.write_text(
+        """
+rules:
+  - id: needs_confidence
+    severity: RED
+    conditions:
+      intensity_category: [ESCS]
+      min_confidence: 0.70
+    channels: [sms]
+    audience: [citizen]
+    cooldown_minutes: 60
+"""
+    )
+    eng = RuleEngine(rules)
+    eng.load()
+
+    assert eng.evaluate({"intensity_category": "ESCS", "confidence": 0.85}) is not None
+
+    eng2 = RuleEngine(rules)
+    eng2.load()
+    assert eng2.evaluate({"intensity_category": "ESCS", "confidence": 0.50}) is None
+
+    eng3 = RuleEngine(rules)
+    eng3.load()
+    assert eng3.evaluate({"intensity_category": "ESCS"}) is None
+
+
+def test_real_rulebook_fires_on_a_severe_landfall():
+    """The shipped alert_rules.yaml must actually produce an alert."""
+    eng = RuleEngine("config/alert_rules.yaml")
+    eng.load()
+    assert eng.rule_count > 0
+
+    match = eng.evaluate(
+        {
+            "intensity_category": "ESCS",
+            "hours_to_landfall": 18,
+            "confidence": 0.82,
+        }
+    )
+    assert match is not None
+    assert match.severity == "RED"

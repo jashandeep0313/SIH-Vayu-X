@@ -9,7 +9,7 @@ Contract: docs/api-contract.md §2
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from src.serve.registry import ModelRegistry
@@ -66,8 +66,22 @@ class ClassifyRequest(BaseModel):
     crop_uri: str
 
 
+class Observation(BaseModel):
+    observed_at: str
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    est_wind_kt: float = Field(ge=0)
+    est_pressure_hpa: float | None = None
+
+
 class PredictRequest(BaseModel):
-    sequence_uris: list[str]
+    """Forecast from an observed track history.
+
+    Supersedes the frame-sequence form: the trained model works on best-track
+    style fixes, which is what the backend actually holds.
+    """
+
+    observations: list[Observation] = Field(min_length=2)
     environment: EnvironmentFeatures = EnvironmentFeatures()
 
 
@@ -96,6 +110,34 @@ async def identify(request: IdentifyRequest) -> dict:
     raise HTTPException(status_code=501, detail="Not implemented — Phase 2")
 
 
+@app.post("/classify/image", tags=["inference"])
+async def classify_image(file: UploadFile = File(...)) -> dict:
+    """Estimate intensity from an uploaded satellite image.
+
+    Real inference against intensity_from_image_v1.
+    """
+    if not registry.has("intensity"):
+        raise HTTPException(
+            status_code=503,
+            detail="Intensity model not loaded. Run: python -m src.training.train_intensity",
+        )
+
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        img = np.array(Image.open(io.BytesIO(payload)).convert("RGB"))
+    except Exception as exc:
+        raise HTTPException(status_code=415, detail=f"Unreadable image: {exc}") from exc
+
+    return registry.get("intensity").estimate(img)
+
+
 @app.post("/classify", tags=["inference"])
 async def classify(request: ClassifyRequest) -> dict:
     """Classify cloud pattern and estimate intensity for a storm-centred crop."""
@@ -105,9 +147,23 @@ async def classify(request: ClassifyRequest) -> dict:
 
 @app.post("/predict", tags=["inference"])
 async def predict(request: PredictRequest) -> dict:
-    """Forecast track and intensity from a sequence of frames."""
-    # TODO(ml): run ConvLSTM over the sequence, return points + uncertainty radii
-    raise HTTPException(status_code=501, detail="Not implemented — Phase 3")
+    """Forecast track and intensity from an observed history.
+
+    Real inference: gradient-boosted models fitted to IBTrACS best-track data.
+    Uncertainty radii are the model's measured test-set error at each lead time,
+    not an assumption.
+    """
+    if not registry.has("prediction"):
+        raise HTTPException(
+            status_code=503,
+            detail="Track model not loaded. Run: python -m src.training.train_track",
+        )
+    try:
+        return registry.get("prediction").predict(
+            [o.model_dump() for o in request.observations]
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/infer", tags=["inference"])

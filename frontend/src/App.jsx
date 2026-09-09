@@ -57,7 +57,7 @@ export default function App() {
           subtitle={meta.subtitle}
           connected={live.connected}
           pipeline={live.pipeline}
-          demoMode={live.demoMode}
+          dataSource={live.dataSource}
           onRefresh={refreshAll}
         />
 

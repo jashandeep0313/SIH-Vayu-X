@@ -14,8 +14,10 @@ with a call to the model service — the response shape is already the contract.
 import hashlib
 import random
 
+import httpx
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from app.core.config import settings
 from app.services.wind_field import wind_field
 
 router = APIRouter()
@@ -137,4 +139,33 @@ async def analyse_upload(file: UploadFile = File(...)) -> dict:
         )
 
     digest = hashlib.sha256(payload).hexdigest()
-    return _mock_result(digest, file.filename or "upload", len(payload))
+
+    # Real model first; the mock exists only so the UI still works when the
+    # model service is down or the checkpoint has not been trained yet.
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{settings.MODEL_SERVICE_URL}/classify/image",
+                files={"file": (file.filename or "upload", payload, file.content_type)},
+            )
+        if response.status_code == 200:
+            result = response.json()
+            result.update(
+                {
+                    "mock": False,
+                    "filename": file.filename or "upload",
+                    "size_bytes": len(payload),
+                    "sha256": digest[:16],
+                }
+            )
+            return result
+        detail = response.text[:200]
+    except httpx.HTTPError as exc:
+        detail = str(exc)
+
+    fallback = _mock_result(digest, file.filename or "upload", len(payload))
+    fallback["warning"] = (
+        "MOCK RESULT — the trained model was unreachable, so these numbers are "
+        f"generated. ({detail})"
+    )
+    return fallback

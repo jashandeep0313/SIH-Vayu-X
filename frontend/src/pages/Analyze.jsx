@@ -63,15 +63,20 @@ export default function Analyze() {
         <AlertTriangle size={15} className="mt-0.5 shrink-0 text-severity-orange" />
         <div>
           <div className="font-display text-xs font-medium text-ink">
-            Mock inference — no model is trained yet
+            Trained model — but it expects storm-centred infrared frames
           </div>
           <p className="mt-0.5 max-w-3xl text-2xs leading-relaxed text-ink-dim">
-            Results are generated, not predicted, so the interface and the alert pipeline can
-            be tested before Phase 2. Output is seeded from the file hash, so the same image
-            always returns the same answer. Replace{' '}
-            <code className="text-ink-mute">_mock_result</code> in{' '}
-            <code className="text-ink-mute">backend/app/api/v1/routes/inference.py</code> with a
-            model-service call when the classifier lands.
+            <code className="text-ink-mute">intensity_from_image_v1</code> is real: gradient
+            boosting over radial IR structure, fitted to 70,257 labelled frames from 494 storms
+            (NASA/Radiant Earth), split by storm. Held-out wind MAE <strong>11.2 kt</strong>,
+            within one IMD category <strong>86.8%</strong>.
+            <br />
+            It was trained on <strong>storm-centred infrared crops</strong>. Feed it a wide-area
+            true-colour image and it under-reads badly — measured at −75 kt on a full-disk
+            VIIRS frame of Cyclone MOCHA. Use the in-domain samples in{' '}
+            <code className="text-ink-mute">data/test_images/in_domain/</code>, which carry
+            ground truth in the filename. INSAT frames will also differ until the model is
+            retrained on MOSDAC data.
           </p>
         </div>
       </div>
@@ -148,9 +153,14 @@ export default function Analyze() {
         <section className="panel">
           <div className="panel-header">
             <span className="panel-title">Analysis</span>
-            {result && (
-              <span className="chip bg-[#E07A3F26] text-severity-orange">Mock result</span>
-            )}
+            {result &&
+              (result.mock ? (
+                <span className="chip bg-[#E07A3F26] text-severity-orange">Mock result</span>
+              ) : (
+                <span className="chip bg-[#7FAF9A1F] text-sage">
+                  {result.model ?? 'model'}
+                </span>
+              ))}
           </div>
 
           {loading && <LoadingState label="Analysing frame" />}
@@ -170,9 +180,9 @@ export default function Analyze() {
               <div className="text-sm font-medium text-ink">No cyclonic system detected</div>
               <p className="text-xs text-ink-dim">{result.message}</p>
               <Metric
-                label="Detection probability"
-                value={result.detection_probability}
-                unit="%"
+                label={result.mock ? 'Detection probability' : 'Structure score'}
+                value={result.mock ? result.detection_probability : result.structure_score}
+                unit={result.mock ? '%' : ''}
               />
             </div>
           )}
@@ -195,12 +205,38 @@ export default function Analyze() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                <Metric label="Detection" value={result.detection_probability} unit="%" />
+                <Metric
+                  label={result.mock ? 'Detection' : 'Uncertainty'}
+                  value={result.mock ? result.detection_probability : cls.uncertainty_kt}
+                  unit={result.mock ? '%' : 'kt'}
+                />
                 <Metric label="Max wind" value={Math.round(cls.est_wind_kt)} unit="kt" />
                 <Metric label="Pressure" value={Math.round(cls.est_pressure_hpa)} unit="hPa" />
                 <Metric label="Dvorak T" value={cls.dvorak_t_number} />
               </div>
 
+              {!result.mock && cls.wind_range_kt && (
+                <div className="rounded-lg bg-raised px-3 py-2.5 ring-1 ring-hairline">
+                  <div className="field-label">Likely wind range</div>
+                  <div className="tnum mt-1 text-sm text-ink">
+                    {cls.wind_range_kt[0]} – {cls.wind_range_kt[1]} kt
+                  </div>
+                  <div className="mt-1 text-2xs leading-relaxed text-ink-mute">
+                    &plusmn;1 MAE from the model&rsquo;s held-out error. Pattern is{' '}
+                    {cls.pattern_source ?? 'inferred'}.
+                  </div>
+                </div>
+              )}
+
+              {result.trained_on && (
+                <div className="text-2xs leading-relaxed text-ink-mute">
+                  Trained on {result.trained_on.frames?.toLocaleString()} frames from{' '}
+                  {result.trained_on.storms} storms · held-out MAE{' '}
+                  {result.trained_on.wind_mae_kt} kt · {result.trained_on.sensor_note}
+                </div>
+              )}
+
+              {cls.pattern_probabilities && (
               <div>
                 <div className="mb-1.5 field-label">Pattern probabilities</div>
                 <div className="space-y-1">
@@ -232,17 +268,20 @@ export default function Analyze() {
                     ))}
                 </div>
               </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="mb-1 field-label">Model confidence</div>
-                  <ConfidenceBar value={result.confidence} />
+              {result.confidence != null && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="mb-1 field-label">Model confidence</div>
+                    <ConfidenceBar value={result.confidence} />
+                  </div>
+                  <div>
+                    <div className="mb-1 field-label">Out-of-distribution</div>
+                    <ConfidenceBar value={1 - result.out_of_distribution_score} />
+                  </div>
                 </div>
-                <div>
-                  <div className="mb-1 field-label">Out-of-distribution</div>
-                  <ConfidenceBar value={1 - result.out_of_distribution_score} />
-                </div>
-              </div>
+              )}
 
               {result.wind_field?.wind_radii && (
                 <div>

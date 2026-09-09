@@ -14,7 +14,7 @@ export function useLiveCyclones() {
   const [error, setError] = useState(null);
   const [connected, setConnected] = useState(false);
   const [pipeline, setPipeline] = useState(null);
-  const [demoMode, setDemoMode] = useState(false);
+  const [dataSource, setDataSource] = useState(null);
 
   const refresh = useCallback(() => {
     setError(null);
@@ -23,7 +23,7 @@ export function useLiveCyclones() {
       system.pipeline().then(setPipeline).catch(() => setPipeline(null)),
       system
         .version()
-        .then((v) => setDemoMode(Boolean(v.demo_mode)))
+        .then((v) => setDataSource(v.data_source ?? null))
         .catch(() => {}),
     ])
       .catch(setError)
@@ -52,5 +52,5 @@ export function useLiveCyclones() {
     };
   }, []);
 
-  return { cyclones, loading, error, connected, pipeline, demoMode, refresh };
+  return { cyclones, loading, error, connected, pipeline, dataSource, refresh };
 }

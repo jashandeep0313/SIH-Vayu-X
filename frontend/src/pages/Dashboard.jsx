@@ -6,6 +6,7 @@ import IntensityChart from '../components/charts/IntensityChart.jsx';
 import StormList from '../components/cyclone/StormList.jsx';
 import ClassificationPanel from '../components/cyclone/ClassificationPanel.jsx';
 import ForecastTable from '../components/cyclone/ForecastTable.jsx';
+import Verification from '../components/cyclone/Verification.jsx';
 import StatCard from '../components/common/StatCard.jsx';
 import { EmptyState, ErrorState, LoadingState, Skeleton } from '../components/common/States.jsx';
 import { useCycloneDetail } from '../hooks/useCycloneDetail.js';
@@ -41,6 +42,7 @@ export default function Dashboard({ live, alerts }) {
   );
 
   const selected = cyclones.find((c) => c.id === selectedId);
+  const replay = detail?.metadata?.replay ? detail.metadata : null;
   const observation = detail?.observations?.[detail.observations.length - 1]
     ?? selected?.latest_observation;
   const forecast = detail?.latest_forecast;
@@ -159,6 +161,24 @@ export default function Dashboard({ live, alerts }) {
         </section>
       </div>
 
+      {replay && (
+        <div className="panel flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
+          <span className="chip bg-[#7FAF9A1F] text-sage ring-1 ring-inset ring-[#7FAF9A40]">
+            Real data
+          </span>
+          <span className="text-2xs text-ink-dim">
+            Historical replay ·{' '}
+            <span className="text-ink">
+              {selected?.name ?? 'system'} ({replay.season})
+            </span>{' '}
+            from {replay.source}
+          </span>
+          <span className="text-2xs text-ink-mute">
+            Season held out of model training · forecast scored against the real outcome below
+          </span>
+        </div>
+      )}
+
       {selected && (
         <>
           {landfall && (
@@ -247,6 +267,8 @@ export default function Dashboard({ live, alerts }) {
               <EmptyState title="No forecast issued for this system" />
             )}
           </section>
+
+          <Verification forecast={forecast} />
         </>
       )}
     </div>

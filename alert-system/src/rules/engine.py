@@ -74,6 +74,15 @@ class RuleEngine:
         """Check every condition in the rule against the event."""
         conditions = rule.get("conditions", {})
         for key, expected in conditions.items():
+            # `min_confidence: 0.7` is shorthand for a floor on the event's
+            # `confidence`, not a field literally named min_confidence. Without
+            # this every rule carrying it would silently never fire.
+            if key == "min_confidence":
+                confidence = event.get("confidence")
+                if confidence is None or confidence < expected:
+                    return False
+                continue
+
             actual = event.get(key)
             if actual is None:
                 return False

@@ -91,6 +91,14 @@ class Forecast(BaseModel):
     environment_inputs: dict | None = None
     rapid_intensification_risk: float | None = Field(default=None, ge=0, le=1)
 
+    # Provenance and scoring. Present when the forecast came from the trained
+    # model; `verification` is populated for replayed storms whose real outcome
+    # is known, so a forecast can be shown beside what actually happened.
+    source: str | None = None
+    trained_on: dict | None = None
+    verification: list[dict] | None = None
+    model_error: str | None = None
+
 
 class CycloneEvent(BaseModel):
     id: UUID

@@ -1,26 +1,30 @@
 import { useEffect, useState } from 'react';
-import { cyclones as cycloneApi } from '../services/api.js';
+import { cyclones as cycloneApi, predictions } from '../services/api.js';
 
 /**
- * Full event for one cyclone: observation history plus latest forecast.
+ * Full event for one cyclone: observation history plus a model forecast.
  *
- * The list endpoint returns summaries only, so track and cone geometry are
- * fetched on selection rather than shipped for every system on every poll.
+ * The forecast is fetched separately because it is generated on demand by the
+ * model service rather than stored on the event — so the two calls are issued
+ * together and merged here.
  */
 export function useCycloneDetail(cycloneId) {
   const [detail, setDetail] = useState(null);
+  const [forecast, setForecast] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!cycloneId) {
       setDetail(null);
+      setForecast(null);
       return undefined;
     }
 
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setForecast(null);
 
     cycloneApi
       .get(cycloneId)
@@ -34,10 +38,24 @@ export function useCycloneDetail(cycloneId) {
         if (!cancelled) setLoading(false);
       });
 
+    // Inference can take a moment; let the history render without waiting on it.
+    predictions
+      .latest(cycloneId)
+      .then((f) => {
+        if (!cancelled) setForecast(f);
+      })
+      .catch(() => {
+        if (!cancelled) setForecast(null);
+      });
+
     return () => {
       cancelled = true;
     };
   }, [cycloneId]);
 
-  return { detail, loading, error };
+  const merged = detail
+    ? { ...detail, latest_forecast: forecast ?? detail.latest_forecast }
+    : null;
+
+  return { detail: merged, forecast, loading, error };
 }

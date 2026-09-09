@@ -19,7 +19,7 @@ function Meter({ icon: Icon, label, value, tone = 'text-ink', iconTone, title })
  * Data staleness sits in the top bar deliberately: a stalled ingestion pipeline
  * is indistinguishable from calm weather unless it is made visible.
  */
-export default function TopBar({ title, subtitle, connected, pipeline, demoMode, onRefresh }) {
+export default function TopBar({ title, subtitle, connected, pipeline, dataSource, onRefresh }) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -41,14 +41,22 @@ export default function TopBar({ title, subtitle, connected, pipeline, demoMode,
       </div>
 
       <div className="flex items-center gap-2">
-        {demoMode && (
-          <span
-            className="chip bg-[#D3AF371F] text-gold ring-1 ring-inset ring-[#D3AF3740]"
-            title="Synthetic data — no live satellite feed connected"
-          >
-            Demo Data
-          </span>
-        )}
+        {dataSource &&
+          (dataSource.real_data ? (
+            <span
+              className="chip bg-[#7FAF9A1F] text-sage ring-1 ring-inset ring-[#7FAF9A40]"
+              title={dataSource.note}
+            >
+              Real Data
+            </span>
+          ) : (
+            <span
+              className="chip bg-[#D3AF371F] text-gold ring-1 ring-inset ring-[#D3AF3740]"
+              title={dataSource.note}
+            >
+              Synthetic
+            </span>
+          ))}
 
         <Meter
           icon={Database}

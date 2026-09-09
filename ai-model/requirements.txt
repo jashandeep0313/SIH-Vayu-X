@@ -1,4 +1,9 @@
-# ---- Deep learning ----
+# ---- Track/intensity model (trained, CPU-only) ----
+# The shipped forecast model is gradient-boosted trees from scikit-learn.
+# Torch below is for the image models, which are not built yet — skip it if you
+# only need forecasting.
+
+# ---- Deep learning (image models — not yet trained) ----
 torch==2.5.1
 torchvision==0.20.1
 onnx==1.17.0
@@ -9,6 +14,7 @@ numpy==2.1.3
 scipy==1.14.1
 pandas==2.2.3
 scikit-learn==1.6.0
+joblib==1.4.2
 
 # ---- Geospatial / satellite data ----
 xarray==2024.11.0
