@@ -83,12 +83,12 @@ def fit(sample: int, out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     joblib.dump(stats, out_dir / "ood_stats.joblib")
     (out_dir / "ood_report.json").write_text(
-        json.dumps(
-            {k: v for k, v in stats.items() if k not in ("mean", "inv_cov")}, indent=2
-        )
+        json.dumps({k: v for k, v in stats.items() if k not in ("mean", "inv_cov")}, indent=2)
     )
 
-    print(f"  median distance {stats['train_p50']:.2f} · p99 {threshold:.2f} · max {stats['train_max']:.2f}")
+    print(
+        f"  median distance {stats['train_p50']:.2f} · p99 {threshold:.2f} · max {stats['train_max']:.2f}"
+    )
     print(f"Saved to {out_dir}/ood_stats.joblib")
     return stats
 

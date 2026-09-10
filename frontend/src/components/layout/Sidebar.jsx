@@ -54,7 +54,7 @@ export default function Sidebar({ alertCount = 0 }) {
       </nav>
 
       <div className="space-y-0.5 border-t border-hairline px-4 py-3.5 text-2xs leading-relaxed">
-        <div className="font-display font-medium text-ink-dim">SIH 2025 · PS 26070</div>
+        <div className="font-display font-medium text-ink-dim">SIH 2026 · PS 26070</div>
         <div className="text-ink-mute">Team Vayu-X (152)</div>
         <div className="text-ink-mute">MoES · India Meteorological Dept.</div>
       </div>

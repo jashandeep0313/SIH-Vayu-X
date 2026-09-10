@@ -25,8 +25,15 @@ from uuid import NAMESPACE_URL, uuid5
 from app.core.config import settings
 from app.services.wind_field import wind_field
 
-IMD_SCALE = [(17, "LPA"), (28, "D"), (34, "DD"), (48, "CS"),
-             (64, "SCS"), (90, "VSCS"), (120, "ESCS")]
+IMD_SCALE = [
+    (17, "LPA"),
+    (28, "D"),
+    (34, "DD"),
+    (48, "CS"),
+    (64, "SCS"),
+    (90, "VSCS"),
+    (120, "ESCS"),
+]
 
 
 def categorise(wind_kt: float) -> str:
@@ -40,9 +47,22 @@ def pressure_from_wind(wind_kt: float) -> float:
     return round(max(870.0, 1010 - (wind_kt / 6.7) ** (1 / 0.644)), 1)
 
 
-_DVORAK_CI = [(1.0, 25), (2.0, 30), (2.5, 35), (3.0, 45), (3.5, 55), (4.0, 65),
-              (4.5, 77), (5.0, 90), (5.5, 102), (6.0, 115), (6.5, 127), (7.0, 140),
-              (7.5, 155), (8.0, 170)]
+_DVORAK_CI = [
+    (1.0, 25),
+    (2.0, 30),
+    (2.5, 35),
+    (3.0, 45),
+    (3.5, 55),
+    (4.0, 65),
+    (4.5, 77),
+    (5.0, 90),
+    (5.5, 102),
+    (6.0, 115),
+    (6.5, 127),
+    (7.0, 140),
+    (7.5, 155),
+    (8.0, 170),
+]
 
 
 def dvorak_t(wind_kt: float) -> float:
@@ -94,7 +114,10 @@ def _load_tracks():
 
     parser = (
         Path(__file__).resolve().parents[3]
-        / "data-pipeline" / "src" / "ingest" / "best_track_parsing.py"
+        / "data-pipeline"
+        / "src"
+        / "ingest"
+        / "best_track_parsing.py"
     )
     if not parser.exists():
         return None
@@ -173,9 +196,7 @@ def events(limit: int | None = None) -> list[dict]:
         history = track.iloc[: cut + 1]
         future = track.iloc[cut + 1 :]
 
-        observations = [
-            _observation(r, None, i) for i, r in enumerate(history.itertuples())
-        ]
+        observations = [_observation(r, None, i) for i, r in enumerate(history.itertuples())]
         name = track["NAME"].dropna().iloc[0] if track["NAME"].notna().any() else None
         peak = float(track["wind_kt"].max())
         basin = "ARB" if float(track["LON"].iloc[0]) < 78 else "BOB"

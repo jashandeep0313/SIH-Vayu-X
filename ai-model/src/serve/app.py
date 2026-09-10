@@ -159,9 +159,7 @@ async def predict(request: PredictRequest) -> dict:
             detail="Track model not loaded. Run: python -m src.training.train_track",
         )
     try:
-        return registry.get("prediction").predict(
-            [o.model_dump() for o in request.observations]
-        )
+        return registry.get("prediction").predict([o.model_dump() for o in request.observations])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

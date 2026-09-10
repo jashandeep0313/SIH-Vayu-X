@@ -2,8 +2,14 @@ import { useRef, useState } from 'react';
 import { Upload, FileImage, AlertTriangle, RotateCcw } from 'lucide-react';
 import { CategoryBadge, ConfidenceBar } from '../components/common/Badges.jsx';
 import { LoadingState } from '../components/common/States.jsx';
+import SmsAlertPanel from '../components/alerts/SmsAlertPanel.jsx';
 import { inference } from '../services/api.js';
-import { categoryColor, categoryLabel, PATTERN_TYPES } from '../utils/constants.js';
+import {
+  categoryColor,
+  categoryLabel,
+  INTENSITY_CATEGORIES,
+  PATTERN_TYPES,
+} from '../utils/constants.js';
 
 function Metric({ label, value, unit }) {
   return (
@@ -18,6 +24,19 @@ function Metric({ label, value, unit }) {
     </div>
   );
 }
+
+// Bundled in frontend/public/samples so the feature is testable without hunting
+// for files. Ground truth is in the filename.
+const SAMPLES = [
+  { file: 'nasa_ir_LPA_15kt.jpg', label: 'LPA · 15 kt' },
+  { file: 'nasa_ir_D_20kt.jpg', label: 'D · 20 kt' },
+  { file: 'nasa_ir_DD_33kt.jpg', label: 'DD · 33 kt' },
+  { file: 'nasa_ir_CS_35kt.jpg', label: 'CS · 35 kt' },
+  { file: 'nasa_ir_SCS_50kt.jpg', label: 'SCS · 50 kt' },
+  { file: 'nasa_ir_VSCS_74kt.jpg', label: 'VSCS · 74 kt' },
+  { file: 'nasa_ir_ESCS_112kt.jpg', label: 'ESCS · 112 kt' },
+  { file: 'mocha_2023-05-14.png', label: 'MOCHA true-colour (tests OOD guard)' },
+];
 
 export default function Analyze() {
   const [preview, setPreview] = useState(null);
@@ -42,6 +61,12 @@ export default function Analyze() {
     }
   };
 
+  const loadSample = async (name) => {
+    const blob = await (await fetch(`/samples/${name}`)).blob();
+    const type = name.endsWith('.png') ? 'image/png' : 'image/jpeg';
+    submit(new File([blob], name, { type }));
+  };
+
   const reset = () => {
     setPreview(null);
     setResult(null);
@@ -50,6 +75,7 @@ export default function Analyze() {
   };
 
   const cls = result?.classification;
+  const trained = result?.trained_on;
 
   return (
     <div className="space-y-3 p-4">
@@ -66,17 +92,22 @@ export default function Analyze() {
             Trained model — but it expects storm-centred infrared frames
           </div>
           <p className="mt-0.5 max-w-3xl text-2xs leading-relaxed text-ink-dim">
-            <code className="text-ink-mute">intensity_from_image_v1</code> is real: gradient
-            boosting over radial IR structure, fitted to 70,257 labelled frames from 494 storms
-            (NASA/Radiant Earth), split by storm. Held-out wind MAE <strong>11.2 kt</strong>,
-            within one IMD category <strong>86.8%</strong>.
+            <code className="text-ink-mute">{trained?.model ?? 'intensity_from_image_v2'}</code>{' '}
+            is real: gradient boosting over radial IR structure, fitted to{' '}
+            {(trained?.frames ?? 70257).toLocaleString()} labelled frames from{' '}
+            {trained?.storms ?? 494} storms (NASA/Radiant Earth), split by storm. Held-out wind
+            MAE <strong>{trained?.wind_mae_kt ?? '—'} kt</strong>, within one IMD category{' '}
+            <strong>
+              {trained?.category_within_one
+                ? `${Math.round(trained.category_within_one * 100)}%`
+                : '—'}
+            </strong>
+            .
             <br />
-            It was trained on <strong>storm-centred infrared crops</strong>. Feed it a wide-area
-            true-colour image and it under-reads badly — measured at −75 kt on a full-disk
-            VIIRS frame of Cyclone MOCHA. Use the in-domain samples in{' '}
-            <code className="text-ink-mute">data/test_images/in_domain/</code>, which carry
-            ground truth in the filename. INSAT frames will also differ until the model is
-            retrained on MOSDAC data.
+            It was trained on <strong>storm-centred infrared crops</strong>. Colour or wide-area
+            imagery is refused rather than scored — a greyscale check plus a Mahalanobis distance
+            flags it as out-of-distribution. Sample frames with ground truth in the filename are
+            bundled below. INSAT frames will differ until the model is retrained on MOSDAC data.
           </p>
         </div>
       </div>
@@ -139,6 +170,22 @@ export default function Analyze() {
               />
             </div>
 
+            <div className="mt-3">
+              <div className="field-label mb-1.5">Or try a labelled sample</div>
+              <div className="flex flex-wrap gap-1.5">
+                {SAMPLES.map((s) => (
+                  <button
+                    key={s.file}
+                    type="button"
+                    onClick={() => loadSample(s.file)}
+                    className="btn text-2xs"
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {result && (
               <div className="mt-3 flex items-center gap-2 text-2xs text-ink-mute">
                 <FileImage size={11} />
@@ -177,13 +224,37 @@ export default function Analyze() {
 
           {result && !result.cyclone_detected && (
             <div className="space-y-3 p-4">
-              <div className="text-sm font-medium text-ink">No cyclonic system detected</div>
-              <p className="text-xs text-ink-dim">{result.message}</p>
-              <Metric
-                label={result.mock ? 'Detection probability' : 'Structure score'}
-                value={result.mock ? result.detection_probability : result.structure_score}
-                unit={result.mock ? '%' : ''}
-              />
+              {/* "Cannot assess" and "no storm here" are different answers, and
+                  conflating them is how a real cyclone gets waved through. */}
+              <div className="text-sm font-medium text-ink">
+                {result.out_of_distribution?.flagged
+                  ? 'Cannot assess this image'
+                  : 'No cyclonic system detected'}
+              </div>
+              <p className="text-xs leading-relaxed text-ink-dim">
+                {result.warning ?? result.message}
+              </p>
+              {result.out_of_distribution?.flagged && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric
+                    label="Reason"
+                    value={
+                      result.out_of_distribution.reason?.includes('colour')
+                        ? 'Colour imagery'
+                        : 'Off-distribution'
+                    }
+                  />
+                  <Metric
+                    label="Chroma"
+                    value={result.out_of_distribution.chroma}
+                    unit={`limit ${result.out_of_distribution.chroma_limit}`}
+                  />
+                </div>
+              )}
+              <p className="text-2xs leading-relaxed text-ink-mute">
+                This is not a low-intensity reading — the model declined to score the frame.
+                Feed it a storm-centred infrared crop, such as the labelled samples on the left.
+              </p>
             </div>
           )}
 
@@ -206,9 +277,9 @@ export default function Analyze() {
 
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                 <Metric
-                  label={result.mock ? 'Detection' : 'Uncertainty'}
-                  value={result.mock ? result.detection_probability : cls.uncertainty_kt}
-                  unit={result.mock ? '%' : 'kt'}
+                  label="Confidence"
+                  value={result.confidence_pct ?? result.detection_probability}
+                  unit="%"
                 />
                 <Metric label="Max wind" value={Math.round(cls.est_wind_kt)} unit="kt" />
                 <Metric label="Pressure" value={Math.round(cls.est_pressure_hpa)} unit="hPa" />
@@ -222,8 +293,27 @@ export default function Analyze() {
                     {cls.wind_range_kt[0]} – {cls.wind_range_kt[1]} kt
                   </div>
                   <div className="mt-1 text-2xs leading-relaxed text-ink-mute">
-                    &plusmn;1 MAE from the model&rsquo;s held-out error. Pattern is{' '}
+                    From {cls.interval_source ?? 'the model'}
+                    {cls.interval_width_kt ? ` · ${cls.interval_width_kt} kt wide` : ''}. Pattern is{' '}
                     {cls.pattern_source ?? 'inferred'}.
+                  </div>
+                </div>
+              )}
+
+              {/* A known directional error is only useful if the operator sees
+                  it. IR saturates at the top of the scale, so intense storms
+                  read low — the dangerous direction for a warning system. */}
+              {cls.intensity_caveat && (
+                <div
+                  className="flex items-start gap-2 rounded-lg px-3 py-2.5 ring-1 ring-[#D3AF3740]"
+                  style={{ background: 'rgba(211,175,55,.10)' }}
+                >
+                  <AlertTriangle size={13} className="mt-0.5 shrink-0 text-gold" />
+                  <div>
+                    <div className="field-label text-gold">Likely an underestimate</div>
+                    <p className="mt-0.5 text-2xs leading-relaxed text-ink-dim">
+                      {cls.intensity_caveat}
+                    </p>
                   </div>
                 </div>
               )}
@@ -232,15 +322,28 @@ export default function Analyze() {
                 <div className="text-2xs leading-relaxed text-ink-mute">
                   Trained on {result.trained_on.frames?.toLocaleString()} frames from{' '}
                   {result.trained_on.storms} storms · held-out MAE{' '}
-                  {result.trained_on.wind_mae_kt} kt · {result.trained_on.sensor_note}
+                  {result.trained_on.wind_mae_kt} kt
+                  {result.trained_on.per_category_error?.[cls.intensity_category] && (
+                    <>
+                      {' '}(
+                      {result.trained_on.per_category_error[cls.intensity_category].mae_kt} kt for{' '}
+                      {cls.intensity_category})
+                    </>
+                  )}{' '}
+                  · {result.trained_on.sensor_note}
                 </div>
               )}
 
-              {cls.pattern_probabilities && (
+              {(cls.category_probabilities ?? cls.pattern_probabilities) && (
               <div>
-                <div className="mb-1.5 field-label">Pattern probabilities</div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="field-label">
+                    {cls.category_probabilities ? 'Category probabilities' : 'Pattern probabilities'}
+                  </span>
+                  <span className="text-2xs text-ink-mute">sums to 100</span>
+                </div>
                 <div className="space-y-1">
-                  {Object.entries(cls.pattern_probabilities)
+                  {Object.entries(cls.category_probabilities ?? cls.pattern_probabilities)
                     .sort((a, b) => b[1] - a[1])
                     .map(([name, pct], i) => (
                       <div key={name} className="flex items-center gap-2">
@@ -249,7 +352,7 @@ export default function Analyze() {
                             i === 0 ? 'text-ink' : 'text-ink-mute'
                           }`}
                         >
-                          {PATTERN_TYPES[name] ?? name}
+                          {INTENSITY_CATEGORIES[name]?.label ?? PATTERN_TYPES[name] ?? name}
                         </span>
                         <div className="h-1 flex-1 overflow-hidden rounded-full bg-overlay">
                           <div
@@ -270,18 +373,21 @@ export default function Analyze() {
               </div>
               )}
 
-              {result.confidence != null && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="mb-1 field-label">Model confidence</div>
-                    <ConfidenceBar value={result.confidence} />
+              {result.confidence_pct != null && (
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="field-label">Model confidence</span>
+                    <span className="tnum text-2xs text-ink-dim">{result.confidence_pct}%</span>
                   </div>
-                  <div>
-                    <div className="mb-1 field-label">Out-of-distribution</div>
-                    <ConfidenceBar value={1 - result.out_of_distribution_score} />
-                  </div>
+                  <ConfidenceBar value={result.confidence_pct / 100} showLabel={false} />
+                  <p className="mt-1 text-2xs leading-relaxed text-ink-mute">
+                    Top category probability, reduced when the wind interval is wide. Low
+                    confidence means an ambiguous frame — not a low-intensity storm.
+                  </p>
                 </div>
               )}
+
+              <SmsAlertPanel analysis={result} />
 
               {result.wind_field?.wind_radii && (
                 <div>

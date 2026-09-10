@@ -43,6 +43,8 @@ export const predictions = {
 };
 
 export const alerts = {
+  previewSms: (payload) => client.post('/alerts/sms/preview', payload).then((r) => r.data),
+  sendSms: (payload) => client.post('/alerts/sms', payload).then((r) => r.data),
   list: (params) => client.get('/alerts', { params }).then((r) => r.data),
   get: (id) => client.get(`/alerts/${id}`).then((r) => r.data),
   acknowledge: (id) => client.post(`/alerts/${id}/acknowledge`).then((r) => r.data),

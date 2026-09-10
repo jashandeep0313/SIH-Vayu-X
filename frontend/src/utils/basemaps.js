@@ -39,13 +39,12 @@ export function buildBasemaps(date = gibsDate()) {
       labels: LABELS_DARK,
     },
     {
-      id: 'truecolor',
-      label: 'True Colour',
-      hint: `MODIS Terra corrected reflectance · ${date}`,
-      url: gibs('MODIS_Terra_CorrectedReflectance_TrueColor', 'GoogleMapsCompatible_Level9', 'jpg', date),
-      attribution: NASA_ATTR,
-      maxZoom: 9,
-      labels: LABELS_IMAGERY,
+      id: 'ocean',
+      label: 'Ocean',
+      hint: 'Blue ocean — the base for the enhanced IR overlay',
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+      attribution: ESRI_ATTR,
+      maxZoom: 13,
     },
     {
       id: 'viirs',
@@ -66,14 +65,6 @@ export function buildBasemaps(date = gibsDate()) {
       labels: LABELS_IMAGERY,
     },
     {
-      id: 'ocean',
-      label: 'Ocean',
-      hint: 'Bathymetry — context for ocean heat content',
-      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-      attribution: ESRI_ATTR,
-      maxZoom: 13,
-    },
-    {
       id: 'street',
       label: 'Street',
       hint: 'Settlements and roads — evacuation planning',
@@ -84,13 +75,24 @@ export function buildBasemaps(date = gibsDate()) {
   ];
 }
 
-export function buildOverlays(date = gibsDate()) {
+export function buildOverlays(date = gibsDate(), isoTime = null) {
   return [
-    // Deliberately no IR / cloud-top overlay here. Both MODIS_*_Brightness_Temp_Band31
-    // and MODIS_*_Cloud_Top_Temp ship fixed, highly saturated colour ramps built for
-    // standalone Worldview viewing; composited under the track they obliterate the
-    // basemap and hide the storm. The cyclone-relevant IR view will come from our own
-    // INSAT composites in data-pipeline, rendered with a ramp we control.
+    {
+      id: 'ir',
+      label: 'Enhanced IR (Meteosat)',
+      hint: 'Colour-enhanced cloud-top temperature · best over Ocean or Satellite',
+      // Served by our own backend, which fetches Meteosat IODC from EUMETSAT and
+      // applies the enhancement curve. `time` lets the imagery follow the timeline.
+      url: `/api/v1/imagery/ir/{z}/{x}/{y}.png${isoTime ? `?time=${encodeURIComponent(isoTime)}` : ''}`,
+      attribution: 'Imagery &copy; EUMETSAT · Meteosat IODC',
+      maxZoom: 8,
+      opacity: 1,
+      pairsWith: 'ocean',
+    },
+    // NASA's own MODIS brightness-temperature and cloud-top layers are not used:
+    // both ship fixed, heavily saturated ramps meant for standalone Worldview
+    // viewing, and composited under the track they obliterate the basemap. The IR
+    // layer above is Meteosat IODC put through our own enhancement curve instead.
     {
       id: 'precip',
       label: 'Precipitation',

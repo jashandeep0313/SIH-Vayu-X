@@ -3,7 +3,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
+
+from app.services.ir_imagery import enhanced_ir_tile
+from app.services.ir_imagery import legend as ir_legend
 
 router = APIRouter()
 
@@ -43,3 +46,29 @@ async def get_explanation(observation_id: UUID) -> dict:
     """
     # TODO(backend): return explanation_uri recorded with the observation
     raise HTTPException(status_code=501, detail="Not implemented — Phase 4")
+
+
+# ------------------------------------------------- colour-enhanced IR tiles
+@router.get("/ir/{z}/{x}/{y}.png")
+async def enhanced_ir(z: int, x: int, y: int, time: str | None = Query(None)) -> Response:
+    """Meteosat IODC infrared, colour-enhanced, as an XYZ tile.
+
+    `time` accepts an ISO timestamp so the map can follow a storm through its
+    lifetime; it is snapped to the nearest published 15-minute slot.
+    """
+    png = await enhanced_ir_tile(z, x, y, time)
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=900"},
+    )
+
+
+@router.get("/ir/legend")
+async def enhanced_ir_legend() -> dict:
+    return {
+        "layer": "msg_iodc:ir108",
+        "source": "EUMETSAT EUMETView · Meteosat Indian Ocean Data Coverage",
+        "enhancement": "cloud-top temperature curve; warm pixels transparent",
+        "stops": ir_legend(),
+    }

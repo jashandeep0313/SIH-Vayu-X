@@ -9,7 +9,9 @@ Contract: docs/api-contract.md §1  ·  Payloads: shared/schemas/alert.schema.js
 from datetime import datetime
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.core.config import settings
 from app.services import demo_data
@@ -83,3 +85,39 @@ async def cancel_alert(alert_id: UUID) -> dict:
     """Withdraw an alert and send an all-clear to the same recipients (admin role)."""
     # TODO(backend): mark cancelled, trigger all-clear dispatch
     raise HTTPException(status_code=501, detail="Not implemented — Phase 5")
+
+
+# --------------------------------------------------------------- manual SMS
+class SmsAlertRequest(BaseModel):
+    number: str
+    analysis: dict | None = None
+    message: str | None = None
+    region: str | None = None
+    confirm: bool = False
+    flash: bool = True
+
+
+@router.post("/sms/preview")
+async def preview_sms_alert(payload: SmsAlertRequest) -> dict:
+    """Compose the SMS an analysis would produce. Sends nothing."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post(
+            f"{settings.ALERT_SERVICE_URL}/alert/preview", json=payload.model_dump()
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
+@router.post("/sms")
+async def send_sms_alert(payload: SmsAlertRequest) -> dict:
+    """Send one SMS alert, on explicit operator action only.
+
+    Never called automatically from classification: dispatch costs credits, and
+    an unreviewed model output should not be able to text the public.
+    """
+    async with httpx.AsyncClient(timeout=45) as client:
+        r = await client.post(f"{settings.ALERT_SERVICE_URL}/alert/sms", json=payload.model_dump())
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()

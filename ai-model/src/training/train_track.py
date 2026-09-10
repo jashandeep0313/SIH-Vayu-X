@@ -47,7 +47,11 @@ def _load(path: str) -> pd.DataFrame:
     import importlib.util
 
     module_path = (
-        Path(__file__).resolve().parents[3] / "data-pipeline" / "src" / "ingest" / "best_track_parsing.py"
+        Path(__file__).resolve().parents[3]
+        / "data-pipeline"
+        / "src"
+        / "ingest"
+        / "best_track_parsing.py"
     )
     spec = importlib.util.spec_from_file_location("vayux_best_track", module_path)
     module = importlib.util.module_from_spec(spec)
@@ -66,11 +70,19 @@ def persistence_forecast(df: pd.DataFrame, lead: int) -> tuple[np.ndarray, np.nd
     return lat, lon, wind
 
 
-def train(data_path: str, out_dir: Path) -> dict:
+def train(
+    data_path: str,
+    out_dir: Path,
+    train_max: int = 2022,
+    val_max: int = 2022,
+    min_season: int | None = 2012,
+) -> dict:
     print(f"Loading best track from {data_path}")
     raw = _load(data_path)
+    if min_season:
+        raw = raw[raw["SEASON"] >= min_season]
     ds = build_dataset(raw)
-    parts = chronological_split(ds)
+    parts = chronological_split(ds, train_max_season=train_max, val_max_season=val_max)
 
     for name, part in parts.items():
         seasons = f"{int(part['SEASON'].min())}-{int(part['SEASON'].max())}" if len(part) else "—"
@@ -146,8 +158,14 @@ def train(data_path: str, out_dir: Path) -> dict:
             f"(persist {persist_mae:5.2f}, skill {skill_int:+.1%})   n={len(test)}"
         )
 
-    report["train_seasons"] = [int(parts["train"]["SEASON"].min()), int(parts["train"]["SEASON"].max())]
-    report["test_seasons"] = [int(parts["test"]["SEASON"].min()), int(parts["test"]["SEASON"].max())]
+    report["train_seasons"] = [
+        int(parts["train"]["SEASON"].min()),
+        int(parts["train"]["SEASON"].max()),
+    ]
+    report["test_seasons"] = [
+        int(parts["test"]["SEASON"].min()),
+        int(parts["test"]["SEASON"].max()),
+    ]
     report["n_storms_total"] = int(ds["SID"].nunique())
 
     (out_dir / "track_model_report.json").write_text(json.dumps(report, indent=2))
@@ -159,8 +177,14 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Train Vayu-X track/intensity models")
     p.add_argument("--data", default=DEFAULT_DATA)
     p.add_argument("--out", default=str(CHECKPOINT_DIR))
+    p.add_argument("--min-season", type=int, default=2012,
+                   help="earliest season to use at all")
+    p.add_argument("--train-max", type=int, default=2022,
+                   help="last season used for training")
+    p.add_argument("--val-max", type=int, default=2022,
+                   help="last season used for validation; test is everything after")
     args = p.parse_args()
-    train(args.data, Path(args.out))
+    train(args.data, Path(args.out), args.train_max, args.val_max, args.min_season)
 
 
 if __name__ == "__main__":

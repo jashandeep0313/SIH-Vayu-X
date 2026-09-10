@@ -22,8 +22,15 @@ from src.features.track_features import FEATURE_COLUMNS, FORECAST_LEADS, build_d
 
 DEFAULT_CHECKPOINTS = Path("models/checkpoints")
 
-IMD_SCALE = [(17, "LPA"), (28, "D"), (34, "DD"), (48, "CS"),
-             (64, "SCS"), (90, "VSCS"), (120, "ESCS")]
+IMD_SCALE = [
+    (17, "LPA"),
+    (28, "D"),
+    (34, "DD"),
+    (48, "CS"),
+    (64, "SCS"),
+    (90, "VSCS"),
+    (120, "ESCS"),
+]
 
 
 def categorise(wind_kt: float) -> str:

@@ -117,6 +117,10 @@ export default function Dashboard({ live, alerts }) {
                 label="Forecast"
               />
               <LegendItem
+                swatch={<span className="h-0.5 w-5 rounded-full bg-sage" />}
+                label="Actual outcome"
+              />
+              <LegendItem
                 swatch={
                   <span className="h-2.5 w-2.5 rounded-sm border border-dashed border-ink-mute bg-[#686F7C26]" />
                 }

@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from src.manual_sms import build_message, is_alertable, send_alert
 from src.rendering import render_alert
 from src.rules.engine import RuleEngine
 
@@ -96,6 +97,42 @@ async def evaluate(cyclone_event: dict) -> dict:
         },
         "alert": rendered,
     }
+
+
+class SmsRequest(BaseModel):
+    number: str
+    message: str | None = None
+    confirm: bool = False
+    flash: bool = True
+    region: str | None = None
+    analysis: dict | None = None
+
+
+@app.post("/alert/preview", tags=["alerts"])
+async def preview_sms(payload: SmsRequest) -> dict:
+    """Compose the SMS an analysis would produce, without sending anything."""
+    if not payload.analysis:
+        raise HTTPException(status_code=400, detail="analysis is required")
+    return {
+        "alertable": is_alertable(payload.analysis),
+        "message": build_message(payload.analysis, payload.region),
+    }
+
+
+@app.post("/alert/sms", tags=["alerts"])
+async def send_sms(payload: SmsRequest) -> dict:
+    """Send one SMS alert. Requires confirm=true; never fires automatically.
+
+    Manual by design: dispatch costs credits, and an unreviewed model output
+    should not be able to text the public on its own.
+    """
+    message = payload.message
+    if not message:
+        if not payload.analysis:
+            raise HTTPException(status_code=400, detail="message or analysis is required")
+        message = build_message(payload.analysis, payload.region)["text"]
+
+    return await send_alert(payload.number, message, payload.confirm, payload.flash)
 
 
 @app.post("/dispatch", tags=["alerts"])

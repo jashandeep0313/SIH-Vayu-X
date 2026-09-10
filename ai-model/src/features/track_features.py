@@ -38,9 +38,7 @@ def _storm_features(g: pd.DataFrame) -> pd.DataFrame:
     # Motion vector in degrees/hour — the dominant control on short-range track
     g["u_deg_h"] = g["dlon_12h"] / 12.0
     g["v_deg_h"] = g["dlat_12h"] / 12.0
-    g["speed_kmh"] = (
-        haversine_km(g["LAT"].shift(4), g["LON"].shift(4), g["LAT"], g["LON"]) / 12.0
-    )
+    g["speed_kmh"] = haversine_km(g["LAT"].shift(4), g["LON"].shift(4), g["LAT"], g["LON"]) / 12.0
     g["heading_deg"] = (np.degrees(np.arctan2(g["dlon_12h"], g["dlat_12h"])) + 360) % 360
 
     g["age_h"] = (g["ISO_TIME"] - g["ISO_TIME"].iloc[0]).dt.total_seconds() / 3600.0
@@ -61,13 +59,29 @@ def _storm_features(g: pd.DataFrame) -> pd.DataFrame:
 
 
 FEATURE_COLUMNS = [
-    "LAT", "LON", "wind_kt", "pressure_hpa",
-    "dlat_6h", "dlon_6h", "dwind_6h",
-    "dlat_12h", "dlon_12h", "dwind_12h",
-    "dlat_24h", "dlon_24h", "dwind_24h",
-    "u_deg_h", "v_deg_h", "speed_kmh", "heading_deg",
-    "age_h", "wind_max_so_far", "wind_rate_6h",
-    "day_of_year_sin", "day_of_year_cos", "DIST2LAND",
+    "LAT",
+    "LON",
+    "wind_kt",
+    "pressure_hpa",
+    "dlat_6h",
+    "dlon_6h",
+    "dwind_6h",
+    "dlat_12h",
+    "dlon_12h",
+    "dwind_12h",
+    "dlat_24h",
+    "dlon_24h",
+    "dwind_24h",
+    "u_deg_h",
+    "v_deg_h",
+    "speed_kmh",
+    "heading_deg",
+    "age_h",
+    "wind_max_so_far",
+    "wind_rate_6h",
+    "day_of_year_sin",
+    "day_of_year_cos",
+    "DIST2LAND",
 ]
 
 

@@ -1,0 +1,55 @@
+{
+  "in_domain": [
+    {
+      "file": "nasa_ir_ESCS_112kt.jpg",
+      "true_wind_kt": 112.0,
+      "true_category": "ESCS",
+      "source": "NASA/Radiant Earth TC Wind Estimation",
+      "modality": "geostationary IR"
+    },
+    {
+      "file": "nasa_ir_CS_35kt.jpg",
+      "true_wind_kt": 35.0,
+      "true_category": "CS",
+      "source": "NASA/Radiant Earth TC Wind Estimation",
+      "modality": "geostationary IR"
+    },
+    {
+      "file": "nasa_ir_D_20kt.jpg",
+      "true_wind_kt": 20.0,
+      "true_category": "D",
+      "source": "NASA/Radiant Earth TC Wind Estimation",
+      "modality": "geostationary IR"
+    },
+    {
+      "file": "nasa_ir_DD_33kt.jpg",
+      "true_wind_kt": 33.0,
+      "true_category": "DD",
+      "source": "NASA/Radiant Earth TC Wind Estimation",
+      "modality": "geostationary IR"
+    },
+    {
+      "file": "nasa_ir_SCS_50kt.jpg",
+      "true_wind_kt": 50.0,
+      "true_category": "SCS",
+      "source": "NASA/Radiant Earth TC Wind Estimation",
+      "modality": "geostationary IR"
+    },
+    {
+      "file": "nasa_ir_VSCS_74kt.jpg",
+      "true_wind_kt": 74.0,
+      "true_category": "VSCS",
+      "source": "NASA/Radiant Earth TC Wind Estimation",
+      "modality": "geostationary IR"
+    },
+    {
+      "file": "nasa_ir_LPA_15kt.jpg",
+      "true_wind_kt": 15.0,
+      "true_category": "LPA",
+      "source": "NASA/Radiant Earth TC Wind Estimation",
+      "modality": "geostationary IR"
+    }
+  ],
+  "note": "IR frames matching the training distribution \u2014 use these to test the intensity model.",
+  "out_of_domain_warning": "The *.png VIIRS true-colour files in this folder are wide-area RGB, a different modality from the model's training data. They are useful for testing the upload UI and the OOD guard, not for judging accuracy."
+}

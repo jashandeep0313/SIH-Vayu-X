@@ -1,14 +1,13 @@
 """Satellite image upload → cyclone classification.
 
-!!! MOCK IMPLEMENTATION !!!
-No model exists yet (ai-model/src/models/* all raise NotImplementedError, and
-there are no checkpoints). Every number returned here is generated, not
-predicted. It exists so the frontend and alert-system can be built and tested
-before Phase 2 lands.
+Real by default: the upload is forwarded to the model service, which runs
+`intensity_from_image_v2` (trained on ~70k labelled IR frames) and returns a
+genuine estimate, prediction interval and category probabilities.
 
-Every response carries `"mock": true` and a `warning` string, and the UI renders
-a MOCK RESULT badge. When the real classifier arrives, replace `_mock_result`
-with a call to the model service — the response shape is already the contract.
+`_mock_result` is now only a fallback for when that service is unreachable —
+the UI stays usable during a restart instead of showing an error page. Anything
+it produces carries `"mock": true` and a `warning`, and the UI renders a MOCK
+RESULT badge, so a generated number can never be mistaken for a predicted one.
 """
 
 import hashlib

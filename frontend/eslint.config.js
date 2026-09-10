@@ -22,6 +22,8 @@ export default [
         clearInterval: 'readonly',
         fetch: 'readonly',
         FormData: 'readonly',
+        File: 'readonly',
+        Blob: 'readonly',
         URL: 'readonly',
         console: 'readonly',
       },

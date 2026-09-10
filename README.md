@@ -1,6 +1,6 @@
 # Vayu-X — AI/ML Tropical Cyclone Intelligence System
 
-> **Smart India Hackathon 2025** · Problem Statement **26070**
+> **Smart India Hackathon 2026** · Problem Statement **26070**
 > **Team No.** 152 · **Team Name** Vayu-X
 
 An AI/ML system for **identification**, **classification**, and **prediction** of tropical
@@ -256,40 +256,104 @@ A second trained model estimates intensity directly from a satellite image.
 | | |
 |---|---|
 | **Training data** | NASA / Radiant Earth *Tropical Cyclone Wind Estimation* — 70,257 labelled IR frames, 494 storms. Public, CC-BY-4.0, no credentials |
-| **Model** | `intensity_from_image_v1` — gradient boosting over **radial IR structure** features (concentric-ring brightness statistics, core-minus-environment contrast, asymmetry, cold-cloud fraction). That is the Dvorak signal expressed numerically, which is why it trains on a CPU in minutes instead of needing a GPU |
-| **Split** | By storm — no storm appears in both train and test |
+| **Model** | `intensity_from_image_v2` — gradient boosting over **108 radial IR structure** features (16 concentric-ring statistics, quadrant asymmetry, gradient/texture, explicit eye signature). That is the Dvorak signal expressed numerically, which is why it trains on a CPU instead of needing a GPU |
+| **Split** | By storm, 80/20, with a further 15% of storms held out purely to calibrate the prediction interval |
 
 | Metric | Value |
 |---|---|
-| Wind MAE | **11.2 kt** (mean baseline 20.8 kt → **+46% skill**) |
-| Wind RMSE | 15.5 kt |
-| Exact IMD category | 43.1% |
-| Within one category | **86.8%** |
+| Wind MAE | **10.25 kt** (mean baseline 21.3 kt → **+51.9% skill**) |
+| Wind RMSE | 13.98 kt |
+| Exact IMD category | 43.6% |
+| Within one category | **85.3%** |
+| Interval coverage (target 80%) | 70.8% raw → **78.2% conformalised** |
 
 For scale, trained-analyst Dvorak spread is around 10 kt.
 
+### The headline MAE hides where the errors are
+
+A single average over a set dominated by moderate storms is the easiest number
+to quote and the least useful one. Broken out by category on the held-out
+storms:
+
+| Category | n | MAE | Bias |
+|---|---|---|---|
+| LPA | 123 | 12.2 | +12.2 |
+| D | 2303 | 7.2 | +6.4 |
+| DD | 1748 | 8.9 | +7.1 |
+| CS | 4219 | 8.5 | +4.2 |
+| SCS | 2909 | 10.2 | −2.0 |
+| VSCS | 2599 | 11.8 | −4.3 |
+| **ESCS** | 1412 | **16.2** | **−12.2** |
+| **SuCS** | 623 | **17.2** | **−15.7** |
+
+The model over-reads weak systems and **under-reads severe ones** — for a
+warning system, the dangerous direction. Two causes, one fixable:
+
+**Class imbalance** (fixable). The training set holds ~11.7k CS frames against
+~1.0k SuCS, so a squared-error fit minimises its loss by pulling everything
+toward the middle. The regressors are therefore trained with inverse-frequency
+sample weights (`--severity-weight`, default 0.5, chosen by measurement). That
+cut severe-storm MAE 17.2 → 16.5 kt and bias −14.0 → −13.3 kt, halved the VSCS
+bias (−6.4 → −4.3), and tightened the conformal padding from +3.1 to +2.1 kt —
+for 0.2 kt on the headline MAE. A deliberate trade, not a free win.
+
+The classifier is deliberately *left unweighted*: measured on the same storms,
+weighting it was a wash (identical 43.6% accuracy, +1.0pp severe recall bought
+at +1.4pp severe false alarms), because cross-entropy does not suffer the same
+pull toward the mean.
+
+**Infrared saturation** (not fixable here). Once cloud tops reach the
+tropopause they cannot get colder, so a 100 kt and a 140 kt eyewall look much
+alike in a single IR channel. This is the same ceiling the Dvorak technique has
+had since the 1970s, and it is why operational centres bring in passive
+microwave to resolve the inner core. No amount of reweighting removes it.
+
+So estimates at VSCS and above carry an explicit `intensity_caveat` telling the
+operator the reading is likely a lower bound, with the measured bias for that
+category attached. Surfacing a known directional error beats burying it in an
+interval.
+
+### Four models, not one
+
+| Output | Source |
+|---|---|
+| `est_wind_kt` | Regression over the structure features |
+| `wind_range_kt` | p10/p90 quantile models, **conformalised** on held-out storms. Raw quantile models advertised 80% coverage and delivered 71% — the conformal padding (+2.1 kt) fixes that. The point estimate is clamped into this band: the two are separate fits, and on ~1% of frames the estimate would otherwise fall outside the range printed beside it |
+| `category_probabilities` | A trained classifier over the IMD scale, 0–100, summing to 100 |
+| `confidence_pct` | Top class probability, reduced when the interval is wide. It tracks error: on labelled samples it read 91–95% where error was 1–2 kt, and 30–39% where error was 13–36 kt |
+
+### Unrelated images are refused, not scored
+
+Three independent gates, any one of which refuses the image:
+
+| Gate | Catches |
+|---|---|
+| Chroma | Colour imagery — the model reads single-channel IR |
+| Mahalanobis + IsolationForest | Frames far from, or in a hole inside, the training distribution |
+| **Texture envelope** | Local roughness outside the band real cloud imagery occupies |
+
+The texture gate exists because the first two miss inputs that sit *near* the distribution mean:
+random noise scored 27 kt and a linear gradient scored 60 kt until it was added. Noise is 3.3×
+too rough (`grad_mean` 0.264 vs a 0.079 ceiling); a synthetic ramp is perfectly smooth.
+
+Measured: **8/8 adversarial inputs refused** (noise, gradient, flat grey, document, landscape
+photo, checkerboard, synthetic blob, colour photo), **0/7 false refusals** on genuine labelled
+frames, and a 0.4% texture false-positive rate across all 70k training frames. When refused, the
+response carries **no category, no wind and no confidence** — "cannot assess" is not the same
+answer as "no storm here", and conflating them is how a real cyclone gets waved through.
+
 ### The domain gap is real — read this before demoing
 
-The model expects **storm-centred infrared crops**, because that is what it was trained on.
-Measured behaviour on out-of-domain input:
-
-| Input | Predicted | Actual | Error |
-|---|---|---|---|
-| In-domain IR crop (severe) | 106.6 kt | 103 kt | **+3.6** |
-| In-domain IR crop (extreme) | 120.4 kt | 128 kt | −7.6 |
-| Wide-area VIIRS true-colour, Cyclone MOCHA | 39.7 kt | 115 kt | **−75** |
-| Wide-area VIIRS true-colour, clear sky | 30.1 kt | 0 kt | **+30** |
-
-Mean error across five in-domain samples was 11.6 kt, matching the 11.2 kt test MAE — so the
-model is sound; wide-area true-colour images are simply the wrong input. **Do not demo it on a
-screenshot from Google.** INSAT frames will also differ until it is retrained on MOSDAC data.
+The model expects **storm-centred infrared crops**, because that is what it was trained on. A
+wide-area true-colour image is now refused rather than mis-scored, but INSAT frames will still
+differ until it is retrained on MOSDAC data.
 
 ### Test images included
 
 ```
-data/test_images/in_domain/     5 IR crops, ground truth in the filename — use these
-data/test_images/               5 real VIIRS frames (MOCHA, BIPARJOY, TAUKTAE, REMAL,
-                                plus a clear-sky negative control) — for the map, not the model
+data/test_images/nasa_ir_*.jpg  7 labelled IR crops, ground truth in the filename
+data/test_images/*.png          5 real VIIRS frames — exercise the OOD guard
+frontend/public/samples/        the same set, bundled so the UI can load them in one click
 ```
 
 Regenerate the wide-area set with `python scripts/fetch_test_images.py`.
@@ -299,7 +363,7 @@ Regenerate the wide-area set with `python scripts/fetch_test_images.py`.
 | Capability | State |
 |---|---|
 | Track & intensity forecasting | **Real** — trained on IBTrACS, evaluated, serving |
-| Intensity from imagery | **Real** — trained on NASA/Radiant Earth, 11.2 kt MAE |
+| Intensity from imagery | **Real** — trained on NASA/Radiant Earth, 10.25 kt MAE (16.5 kt at ESCS/SuCS — see §7b) |
 | Cyclone *localisation* in a full-disk frame | Not built — needs INSAT full-disk frames |
 | Pattern classification (Dvorak classes) | Not built — the datasets carry wind speed, not pattern labels. Pattern shown anywhere is *inferred from intensity* and labelled as such |
 | Alert dispatch | Rules and message rendering real; geofencing and delivery not built |
@@ -313,7 +377,7 @@ retrain on INSAT frames.
 cd ai-model && python -m src.training.train_track && python -m src.training.train_intensity
 ```
 
-## 7b. Testing without a trained model
+## 7c. Testing the demo path without models
 
 `DEMO_MODE=true` (the default) makes the whole system demonstrable before Phase 2.
 
@@ -354,6 +418,67 @@ thresholds in `alert-system/config/alert_rules.yaml`, then:
 ```bash
 curl -X POST http://localhost:8002/rules/reload
 ```
+
+
+## 7d. Training the models
+
+Both datasets are public and need **no credentials**.
+
+**1 · Best track (IBTrACS) — track & intensity forecasting**
+```bash
+cd data-pipeline && python -c "from src.ingest.best_track import BestTrackFetcher; from datetime import datetime,UTC; from pathlib import Path; print(BestTrackFetcher({'id':'ibtracs','basin':'NI'}).fetch(datetime.now(UTC), Path('../ai-model/data/raw/ibtracs')).status)"
+```
+```bash
+cd ai-model && python -m src.training.train_track --min-season 2012 --train-max 2022
+```
+Trains one model per (lead time × target) on 2012–2022 and scores them on 2023+ —
+seasons the model has never seen. Splits are by season, never random: consecutive
+best-track rows of one storm are near-identical and would leak.
+
+**2 · Satellite imagery (NASA/Radiant Earth) — intensity from an image**
+```bash
+cd ai-model && python -c "import httpx,pathlib; b='https://huggingface.co/datasets/torchgeo/tropical_cyclone/resolve/main/'; d=pathlib.Path('data/raw/nasa_tc'); d.mkdir(parents=True,exist_ok=True); [open(d/f,'wb').write(httpx.get(b+f,timeout=600,follow_redirects=True).content) for f in ['nasa_tropical_storm_competition_train_labels.tar.gz','nasa_tropical_storm_competition_train_source.tar.gz']]"
+```
+```bash
+cd ai-model && python -m src.training.train_intensity
+```
+~1.4 GB download, then one feature pass (cached to `data/processed/`) and four
+models: a wind regressor, p10/p90 quantile models for a real prediction interval,
+a category classifier for genuine 0–100 probabilities, and OOD statistics.
+Splits are by storm. Re-run with `--refresh-cache` after changing features.
+
+**Test images**
+```bash
+python scripts/fetch_test_images.py
+```
+Writes labelled in-domain IR frames plus real VIIRS scenes to `data/test_images/`.
+See `MANIFEST.json` there — the IR frames test accuracy, the colour scenes test
+the out-of-distribution guard.
+
+## 7e. SMS alerts (Fast2SMS)
+
+Dispatch is **manual by design**: credits are finite, and an unreviewed model
+output should not be able to text the public. Severe results surface a *Send SMS
+alert* button on the Image Analysis page, behind an arm-then-confirm step.
+
+```bash
+FAST2SMS_API_KEY=your_key_here
+```
+
+Without a key everything runs in dry-run and nothing leaves the machine.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/alerts/sms/preview -H "Content-Type: application/json" -d "{\"number\":\"6202972050\",\"analysis\":{\"cyclone_detected\":true,\"out_of_distribution\":{\"flagged\":false},\"classification\":{\"intensity_category\":\"ESCS\",\"est_wind_kt\":103}},\"region\":\"Odisha coast\"}"
+```
+
+Guards: `confirm: true` required, 60s per-number cooldown, 25-send cap per run,
+and only SCS or above is alertable.
+
+**On vibration and alert tones** — these cannot be set by the sender. A standard
+SMS uses the recipient's own notification profile. The strongest signal SMS
+offers is a *flash* message (GSM class 0), which renders over the lock screen;
+that is enabled via `FAST2SMS_FLASH=true`. Controlling sound or vibration
+requires a companion app on FCM push, which is why the push channel exists.
 
 ### Lint and test
 
@@ -420,4 +545,4 @@ provider (ISRO/MOSDAC, IMD, NASA, ECMWF, NOAA); see `docs/data-sources.md`.
 
 ---
 
-<sub>Built for Smart India Hackathon 2025 · Problem Statement 26070 · Ministry of Earth Sciences · Team Vayu-X (152)</sub>
+<sub>Built for Smart India Hackathon 2026 · Problem Statement 26070 · Ministry of Earth Sciences · Team Vayu-X (152)</sub>
