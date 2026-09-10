@@ -1,23 +1,47 @@
 /*
- * Vayu-X last-mile siren tower — ESP32 firmware
+ * Vayu-X last-mile siren tower — ESP32 firmware  v2.0
  * SIH PS 26070 · Team Vayu-X (152)
  *
  * A coastal warning that depends on the cellular network fails exactly where it
  * matters. This is the part that does not: a microcontroller driving a lamp
- * stack and a piezo siren, taking commands over a serial link.
+ * stack and a piezo siren, taking commands over whatever link is available.
  *
- * In the demo that link is USB to the analyst's laptop. In a deployment it is
- * LoRa at 433 MHz — same protocol, different transport (see LORA note below).
+ * ------------------------------------------------------------- transports
+ * The same command parser sits behind three transports, so the control-room
+ * code is identical whichever one is carrying the bytes:
+ *
+ *   USB serial   always on. Used for provisioning and as the fallback.
+ *   WiFi (STA)   joins a network; commands over HTTP. Credentials live in NVS,
+ *                never in this file and never in git.
+ *   WiFi (AP)    if it cannot join, it becomes its own access point. No router,
+ *                no infrastructure — which is the deployment story, not a
+ *                workaround.
+ *
+ * OTA is enabled, so this is the last flash that needs a cable.
  *
  * -------------------------------------------------------------- protocol
- * Line-based ASCII, 115200 baud. Human-readable on purpose: you can drive the
- * whole tower from a serial monitor when something is wrong at 2 a.m.
+ * Line-based ASCII. Human-readable on purpose: you can drive the whole tower
+ * from a serial monitor or a browser address bar when something is wrong at
+ * 2 a.m.
  *
- *   PING                        -> PONG vayux-siren 1.0
+ *   PING                        -> PONG vayux-siren 2.0
  *   ALERT <SEV> <CAT> <SECS>    -> OK ALERT <SEV> <SECS>
  *   STOP                        -> OK STOP
  *   TEST                        -> OK TEST
  *   STATUS                      -> OK <state> <secs_remaining>
+ *   NET                         -> OK <mode> <ip> <ssid> <rssi>
+ *   SSID <network name>         -> OK SSID saved      (serial only)
+ *   PASS <passphrase>           -> OK PASS saved      (serial only)
+ *   REBOOT                      -> OK REBOOT          (serial only)
+ *   WIFICLEAR                   -> OK WIFI cleared    (serial only)
+ *
+ * Over HTTP the same strings are reached as:
+ *   GET /cmd?q=ALERT+RED+ESCS+15      the general form
+ *   GET /ping  /status  /test  /stop  convenience aliases
+ *
+ * Credential commands are refused over HTTP on purpose — a network credential
+ * should not be settable by anything already on the network. Each takes the
+ * rest of the line, so names and passphrases containing spaces work.
  *
  * SEV is GREEN | YELLOW | ORANGE | RED.
  *
@@ -34,6 +58,20 @@
  * Nothing here blocks. A delay() in the siren loop would mean the tower stops
  * listening for STOP, which is unacceptable for something this loud.
  */
+
+#include <ArduinoOTA.h>
+#include <ESPmDNS.h>
+#include <Preferences.h>
+#include <WebServer.h>
+#include <WiFi.h>
+
+// Access-point fallback. Deliberately not a secret: it is the "no
+// infrastructure exists" path, and anyone close enough to join is close enough
+// to hear the siren anyway.
+const char *AP_SSID = "Vayu-X-Siren";
+const char *AP_PASS = "vayux2026";
+const char *MDNS_NAME = "vayux-siren";   // reachable as vayux-siren.local
+const unsigned long STA_TIMEOUT_MS = 25000;
 
 // ---------------------------------------------------------------- wiring
 // CHANGE THESE to match how you actually wired the board.
@@ -84,6 +122,14 @@ unsigned long lastBlink  = 0;
 bool blinkOn = false;
 String category = "";
 
+WebServer server(80);
+Preferences prefs;
+bool apMode = false;
+
+String handle(String line, bool fromSerial);   // forward declaration
+void startNetwork();
+String netSummary();
+
 void setup() {
   Serial.begin(115200);
   pinMode(PIN_RED, OUTPUT);
@@ -98,7 +144,9 @@ void setup() {
   }
 
   goGreen();
-  Serial.println("READY vayux-siren 1.0");
+  startNetwork();
+  Serial.println("READY vayux-siren 2.0");
+  Serial.println(netSummary());
 }
 
 // -------------------------------------------------------------- primitives
@@ -201,44 +249,144 @@ void selfTest() {
   goGreen();
 }
 
-void handle(String line) {
-  line.trim();
-  if (line.length() == 0) return;
-
-  if (line == "PING") {
-    Serial.println("PONG vayux-siren 1.0");
-    return;
+String netSummary() {
+  if (apMode) {
+    return String("OK AP ") + WiFi.softAPIP().toString() + " " + AP_SSID + " -";
   }
+  if (WiFi.status() == WL_CONNECTED) {
+    return String("OK STA ") + WiFi.localIP().toString() + " " + WiFi.SSID() + " " +
+           String(WiFi.RSSI());
+  }
+  return "OK OFFLINE - - -";
+}
 
-  if (line == "STOP") {
+/* One parser, every transport.
+ *
+ * Returns the reply instead of printing it, so the HTTP handler and the serial
+ * loop cannot drift apart into two subtly different command sets. `fromSerial`
+ * gates the one command that must not be reachable over the network.
+ */
+String handle(String raw, bool fromSerial) {
+  // Strip only the line ending, never spaces. Real network names have leading
+  // and trailing spaces — "ARTHA 4F 2.4 GHZ " ends with one — and trimming the
+  // line silently stored the wrong SSID and failed to associate with a
+  // status=6 that looked like a bad password. `cmd` is the trimmed copy used
+  // for matching fixed keywords; `line` keeps the payload byte-exact.
+  String line = raw;
+  while (line.length() && (line[line.length() - 1] == '\r' || line[line.length() - 1] == '\n')) {
+    line.remove(line.length() - 1);
+  }
+  String cmd = line;
+  cmd.trim();
+  if (cmd.length() == 0) return "";
+  line = cmd == line ? cmd : line;   // keep raw when it differs
+
+  if (cmd == "PING")   return "PONG vayux-siren 2.0";
+  if (cmd == "NET")    return netSummary();
+
+  if (cmd == "STOP") {
     goGreen();
-    Serial.println("OK STOP");
-    return;
+    return "OK STOP";
   }
 
-  if (line == "TEST") {
+  if (cmd == "TEST") {
     selfTest();
-    Serial.println("OK TEST");
-    return;
+    return "OK TEST";
   }
 
-  if (line == "STATUS") {
+  if (cmd == "STATUS") {
     long remaining = alertUntil > millis() ? (alertUntil - millis()) / 1000 : 0;
-    Serial.printf("OK %s %ld\n", severityName(state), remaining);
-    return;
+    return String("OK ") + severityName(state) + " " + String(remaining);
   }
 
-  if (line.startsWith("ALERT")) {
-    // ALERT <SEV> <CAT> <SECS>
-    int s1 = line.indexOf(' ');
-    int s2 = line.indexOf(' ', s1 + 1);
-    int s3 = line.indexOf(' ', s2 + 1);
-    if (s1 < 0 || s2 < 0 || s3 < 0) { Serial.println("ERR malformed ALERT"); return; }
+  // Credentials are settable over the cable only. Anything already on the
+  // network must not be able to move the tower to a different one.
+  //
+  // SSID and password are set by separate commands, each taking everything to
+  // the end of the line. A single "WIFI <ssid> <pass>" cannot work: real network
+  // names contain spaces ("ARTHA 4F 2.4 GHZ") and so do passphrases, so there is
+  // no delimiter that splits them safely.
+  if (line.startsWith("SSID ")) {
+    if (!fromSerial) return "ERR SSID is serial-only";
+    prefs.begin("vayux", false);
+    prefs.putString("ssid", line.substring(5));
+    prefs.end();
+    return "OK SSID saved";
+  }
 
-    String sev = line.substring(s1 + 1, s2);
-    category   = line.substring(s2 + 1, s3);
-    long secs  = line.substring(s3 + 1).toInt();
-    if (secs <= 0) { Serial.println("ERR bad duration"); return; }
+  if (line.startsWith("PASS ")) {
+    if (!fromSerial) return "ERR PASS is serial-only";
+    prefs.begin("vayux", false);
+    prefs.putString("pass", line.substring(5));
+    prefs.end();
+    // Deliberately does not echo the value back.
+    return "OK PASS saved - send REBOOT to join";
+  }
+
+  // What the tower's own radio can see. The laptop's view is not a substitute:
+  // it may be on 5 GHz, further away, or a different floor.
+  if (cmd == "SCAN") {
+    int n = WiFi.scanNetworks();
+    String out = "OK SCAN " + String(n);
+    for (int i = 0; i < n && i < 20; i++) {
+      out += "\n  [" + WiFi.SSID(i) + "] rssi=" + String(WiFi.RSSI(i)) +
+             " ch=" + String(WiFi.channel(i)) +
+             " enc=" + String((int)WiFi.encryptionType(i));
+    }
+    return out;   // results kept so PICK can use them
+  }
+
+  // Take the SSID straight from the scan by index. Nothing is retyped, so an
+  // invisible trailing space cannot be lost in transcription.
+  if (cmd.startsWith("PICK ")) {
+    if (!fromSerial) return "ERR PICK is serial-only";
+    int idx = cmd.substring(5).toInt();
+    String found = WiFi.SSID(idx);
+    if (found.length() == 0) return "ERR no such scan index - run SCAN first";
+    prefs.begin("vayux", false);
+    prefs.putString("ssid", found);
+    prefs.end();
+    return "OK SSID saved [" + found + "] len=" + String(found.length());
+  }
+
+  if (cmd == "WHY") {
+    return String("OK status=") + String((int)WiFi.status()) +
+           " (3=connected 1=no-ssid 4=auth-fail 6=disconnected)";
+  }
+
+  if (cmd == "RETRY") {
+    if (!fromSerial) return "ERR RETRY is serial-only";
+    startNetwork();
+    return netSummary();
+  }
+
+  if (cmd == "REBOOT") {
+    if (!fromSerial) return "ERR REBOOT is serial-only";
+    Serial.println("OK REBOOT");
+    Serial.flush();
+    delay(120);
+    ESP.restart();
+  }
+
+  if (cmd == "WIFICLEAR") {
+    if (!fromSerial) return "ERR WIFICLEAR is serial-only";
+    prefs.begin("vayux", false);
+    prefs.clear();
+    prefs.end();
+    return "OK WIFI cleared";
+  }
+
+  if (cmd.startsWith("ALERT")) {
+    // ALERT <SEV> <CAT> <SECS>
+    int s1 = cmd.indexOf(' ');
+    int s2 = cmd.indexOf(' ', s1 + 1);
+    int s3 = cmd.indexOf(' ', s2 + 1);
+    if (s1 < 0 || s2 < 0 || s3 < 0) return "ERR malformed ALERT";
+
+    String sev = cmd.substring(s1 + 1, s2);
+    category   = cmd.substring(s2 + 1, s3);
+    long secs  = cmd.substring(s3 + 1).toInt();
+    if (secs <= 0) return "ERR bad duration";
 
     unsigned long ms = (unsigned long)secs * 1000UL;
     if (ms > MAX_ALERT_MS) ms = MAX_ALERT_MS;
@@ -246,17 +394,98 @@ void handle(String line) {
     state = parseSeverity(sev);
     alertUntil = millis() + ms;
     lastBlink = millis();
-    Serial.printf("OK ALERT %s %ld\n", severityName(state), (long)(ms / 1000));
-    return;
+    return String("OK ALERT ") + severityName(state) + " " + String((long)(ms / 1000));
   }
 
-  Serial.println("ERR unknown command");
+  return "ERR unknown command";
+}
+
+// ----------------------------------------------------------------- network
+void startHttp() {
+  auto run = [](const String &cmd) {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.send(200, "text/plain", handle(cmd, false) + "\n");
+  };
+
+  server.on("/cmd", [run]() { run(server.arg("q")); });
+  server.on("/ping", [run]() { run("PING"); });
+  server.on("/status", [run]() { run("STATUS"); });
+  server.on("/test", [run]() { run("TEST"); });
+  server.on("/stop", [run]() { run("STOP"); });
+  server.on("/net", [run]() { run("NET"); });
+  server.on("/alert", [run]() {
+    run("ALERT " + server.arg("sev") + " " +
+        (server.arg("cat").length() ? server.arg("cat") : String("MANUAL")) + " " +
+        (server.arg("secs").length() ? server.arg("secs") : String("10")));
+  });
+  // A human landing on the bare address should get something useful, not a 404.
+  server.onNotFound([]() {
+    server.send(200, "text/plain",
+                "Vayu-X siren tower 2.0\n"
+                "  /ping  /status  /test  /stop  /net\n"
+                "  /alert?sev=RED&cat=ESCS&secs=15\n"
+                "  /cmd?q=<command>\n");
+  });
+  server.begin();
+}
+
+void startNetwork() {
+  prefs.begin("vayux", true);
+  String ssid = prefs.getString("ssid", "");
+  String pass = prefs.getString("pass", "");
+  prefs.end();
+
+  if (ssid.length()) {
+    Serial.printf("WIFI joining %s\n", ssid.c_str());
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid.c_str(), pass.c_str());
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < STA_TIMEOUT_MS) {
+      delay(250);
+    }
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    apMode = false;
+    Serial.printf("WIFI ok ip=%s rssi=%d\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  } else {
+    if (ssid.length()) {
+      Serial.printf("WIFI join failed status=%d (1=no-ssid 4=auth-fail 6=disconnected)\n",
+                    (int)WiFi.status());
+    }
+    // No credentials, or the network is not there. Become the network instead:
+    // a tower that only works where somebody else's infrastructure survives is
+    // not much of a last-mile tower.
+    apMode = true;
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(AP_SSID, AP_PASS);
+    Serial.printf("WIFI ap ssid=%s ip=%s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
+  }
+
+  if (MDNS.begin(MDNS_NAME)) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.printf("MDNS %s.local\n", MDNS_NAME);
+  }
+
+  ArduinoOTA.setHostname(MDNS_NAME);
+  ArduinoOTA.onStart([]() {
+    // Never leave a siren sounding through a firmware update.
+    goGreen();
+    Serial.println("OTA start");
+  });
+  ArduinoOTA.begin();
+
+  startHttp();
 }
 
 // -------------------------------------------------------------------- loop
 void loop() {
+  server.handleClient();
+  ArduinoOTA.handle();
+
   while (Serial.available()) {
-    handle(Serial.readStringUntil('\n'));
+    String reply = handle(Serial.readStringUntil('\n'), true);
+    if (reply.length()) Serial.println(reply);
   }
 
   // Autonomous fallback. If the tower is shaken hard while no alert is active,

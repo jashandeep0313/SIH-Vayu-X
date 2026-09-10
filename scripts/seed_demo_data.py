@@ -10,7 +10,7 @@ live feeds are unavailable on presentation day.
 import json
 import math
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 FORECAST_LEADS = [6, 12, 24, 48, 72]
 
@@ -29,7 +29,7 @@ def wind_to_category(wind_kt: float) -> str:
 def build_demo_event() -> dict:
     """A Bay of Bengal system intensifying on approach to the Odisha coast."""
     cyclone_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # 24 hours of history at 3-hourly steps, tracking north-west and intensifying
     observations = []

@@ -15,7 +15,13 @@ from pydantic import BaseModel
 from src.manual_sms import build_message, is_alertable, send_alert
 from src.rendering import render_alert
 from src.rules.engine import RuleEngine
-from src.siren_device import sound_async, tower
+from src.siren_device import (
+    all_clear_async,
+    self_test_async,
+    sound_async,
+    status_async,
+    tower,
+)
 
 rule_engine = RuleEngine(os.getenv("ALERT_RULES_PATH", "config/alert_rules.yaml"))
 
@@ -159,13 +165,13 @@ async def siren_status() -> dict:
     Worth calling before a demo: it is the difference between finding out now
     and finding out in front of judges.
     """
-    return tower.status()
+    return await status_async()
 
 
 @app.post("/alert/siren/test", tags=["siren"])
 async def siren_test() -> dict:
     """Cycle the lamps and chirp once. Proves the hardware works end to end."""
-    return tower.self_test()
+    return await self_test_async()
 
 
 @app.post("/alert/siren", tags=["siren"])
@@ -187,7 +193,7 @@ async def siren_sound(payload: SirenRequest) -> dict:
 @app.post("/alert/siren/stop", tags=["siren"])
 async def siren_stop() -> dict:
     """All clear — silence the siren and return the lamps to green."""
-    return tower.all_clear()
+    return await all_clear_async()
 
 
 @app.post("/alert/siren/release", tags=["siren"])

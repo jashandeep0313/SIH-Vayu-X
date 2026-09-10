@@ -88,3 +88,26 @@ def test_tower_unreachable_does_not_break_the_analysis(monkeypatch):
     assert out["attempted"] is True
     assert out["sounded"] is False
     assert "unreachable" in out["reason"] or "reason" in out
+
+
+def test_replay_seasons_do_not_overlap_track_training():
+    """Every storm on the map must come from the model's test window.
+
+    Replaying a storm the track model trained on and scoring the forecast
+    against its outcome measures memory, not skill. This caught TAUKTAE (2021)
+    sitting on the dashboard while the model trained on 2012-2022.
+    """
+    import json
+    from pathlib import Path
+
+    report = json.loads(
+        (Path(__file__).resolve().parents[2] / "ai-model" / "models" / "checkpoints"
+         / "track_model_report.json").read_text()
+    )
+    train_lo, train_hi = report["train_seasons"]
+    assert train_hi < settings.REPLAY_MIN_SEASON, (
+        f"replay starts at {settings.REPLAY_MIN_SEASON} but the track model "
+        f"trained through {train_hi} — the map would show storms it has seen"
+    )
+    assert report["test_seasons"][0] == settings.REPLAY_MIN_SEASON
+    assert train_lo < train_hi

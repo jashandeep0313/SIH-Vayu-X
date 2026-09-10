@@ -36,7 +36,13 @@ class Settings(BaseSettings):
     DATA_SOURCE: str = "ibtracs"
     IBTRACS_PATH: str = "../ai-model/data/raw/ibtracs/ibtracs_NI_v04r01.csv"
     REPLAY_STORM_COUNT: int = 4
-    REPLAY_MIN_SEASON: int = 2021  # held out from model training
+    # Must match the track model's test window (train_seasons [2012, 2022],
+    # test_seasons [2023, 2025] in track_model_report.json). This was 2021,
+    # which quietly put TAUKTAE — a storm the model trained on — on the map and
+    # scored its forecast against data it had already seen. Replaying a training
+    # storm and calling the result a forecast is the exact mistake the by-storm
+    # splits elsewhere exist to prevent.
+    REPLAY_MIN_SEASON: int = 2023
 
     # Database
     DATABASE_URL: str = "postgresql+psycopg://vayux:change-me@localhost:5432/vayux"

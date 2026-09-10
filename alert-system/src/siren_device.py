@@ -35,6 +35,8 @@ import os
 import time
 from dataclasses import dataclass
 
+import httpx
+
 try:
     import serial
     from serial.tools import list_ports
@@ -55,6 +57,17 @@ KNOWN_VIDS = {
 SIREN_ENABLED = os.getenv("SIREN_ENABLED", "false").lower() == "true"
 MAX_DURATION_S = int(os.getenv("SIREN_MAX_SECONDS", "30"))
 PORT_OVERRIDE = os.getenv("SIREN_PORT")  # e.g. COM5, /dev/ttyUSB0
+
+# Network transport. When set, the tower is reached over WiFi and no cable is
+# needed; the command strings are identical either way. `vayux-siren.local`
+# works wherever mDNS resolves, an IP address always works.
+SIREN_HOST = os.getenv("SIREN_HOST", "").strip()
+HTTP_TIMEOUT = float(os.getenv("SIREN_HTTP_TIMEOUT", "6"))
+# Probing hosts that are not there is the slow path, and the dashboard polls
+# status on every load. A tower on the LAN answers in milliseconds, so a short
+# probe loses nothing real and keeps a missing tower from costing ten seconds.
+DISCOVERY_TIMEOUT = float(os.getenv("SIREN_DISCOVERY_TIMEOUT", "1.5"))
+AP_FALLBACK_HOST = "192.168.4.1"  # the tower's own access point
 
 # Category -> what the tower should do. Mirrors SEVERITY_FOR in manual_sms.py.
 SEVERITY_FOR = {
@@ -105,12 +118,25 @@ def find_port() -> str | None:
     return None
 
 
-class SirenTower:
-    """One serial-attached siren tower.
+def _http_candidates() -> list[str]:
+    """Hosts to try, most specific first."""
+    hosts = []
+    if SIREN_HOST:
+        hosts.append(SIREN_HOST)
+    hosts += ["vayux-siren.local", AP_FALLBACK_HOST]
+    return hosts
 
-    The connection is opened lazily and kept open: reopening on every alert
-    would reset the board (DTR toggling drives the ESP32 auto-reset circuit)
-    and cost ~2 s of boot time on the one request that must not be slow.
+
+class SirenTower:
+    """One siren tower, reachable over WiFi or over a USB cable.
+
+    Network first when a host is configured, cable otherwise. The command
+    strings are identical across both, which is the whole reason the protocol is
+    plain text — the same code will drive it over LoRa later without changing.
+
+    The serial connection is opened lazily and kept open: reopening on every
+    alert would reset the board (DTR toggling drives the ESP32 auto-reset
+    circuit) and cost ~2 s of boot time on the one request that must not be slow.
     """
 
     def __init__(self) -> None:
@@ -118,9 +144,42 @@ class SirenTower:
         self._port: str | None = None
         self._firmware: str | None = None
         self._sounding_until: float = 0.0
+        self._host: str | None = None
+        self._transport: str = "none"
+
+    # ------------------------------------------------------------ network
+    def _http(self, command: str) -> tuple[str | None, str | None]:
+        """Send one command over HTTP. Returns (reply, host) or (None, None)."""
+        known = bool(self._host)
+        hosts = [self._host] if known else _http_candidates()
+        timeout = HTTP_TIMEOUT if known else DISCOVERY_TIMEOUT
+        for host in hosts:
+            if not host:
+                continue
+            try:
+                r = httpx.get(
+                    f"http://{host}/cmd",
+                    params={"q": command},
+                    timeout=timeout,
+                )
+                if r.status_code == 200:
+                    self._host = host
+                    return r.text.strip(), host
+            except Exception:  # noqa: BLE001 - any failure just means try the next
+                continue
+        self._host = None
+        return None, None
 
     # ---------------------------------------------------------------- link
     def connect(self) -> DeviceStatus:
+        # Network transport wins when it answers: it is the deployment shape,
+        # and it means the tower can sit anywhere with a power bank.
+        reply, host = self._http("PING")
+        if reply and reply.startswith("PONG"):
+            self._transport = "wifi"
+            self._firmware = reply
+            return DeviceStatus(True, host, adapter="wifi", firmware=reply)
+
         if serial is None:
             return DeviceStatus(False, error="pyserial not installed (pip install pyserial)")
 
@@ -131,8 +190,12 @@ class SirenTower:
         if port is None:
             return DeviceStatus(
                 False,
-                error="no ESP32-like serial port found. Check the cable is a DATA "
-                "cable, not charge-only, and that the CH340/CP210x driver is installed.",
+                error=(
+                    "tower not reachable. Over WiFi: set SIREN_HOST to its IP (run "
+                    "scripts/provision_siren_wifi.py once over USB to give it credentials). "
+                    "Over USB: check the cable is a DATA cable, not charge-only, and that "
+                    "the CH340/CP210x driver is installed."
+                ),
             )
 
         try:
@@ -162,10 +225,24 @@ class SirenTower:
                 error=f"port open but firmware did not answer PING (got {reply!r}). "
                 "Is esp32_siren.ino flashed?",
             )
-        return DeviceStatus(True, port, firmware=self._firmware)
+        self._transport = "serial"
+        return DeviceStatus(True, port, adapter="serial", firmware=self._firmware)
 
     def _command(self, line: str) -> str | None:
-        """Write one line, read one line. Never raises — the caller reports."""
+        """Send one command over whichever transport is live.
+
+        Never raises — the caller reports. If the network transport is in use it
+        is tried first and the cable is not touched at all.
+        """
+        if self._transport == "wifi":
+            reply, _ = self._http(line)
+            if reply is not None:
+                return reply
+            # The tower moved, slept, or the network dropped. Fall through and
+            # let the serial path try, rather than reporting a dead tower that
+            # is sitting on the desk plugged in.
+            self._transport = "none"
+
         if self._conn is None or not self._conn.is_open:
             return None
         try:
@@ -180,18 +257,28 @@ class SirenTower:
             return None
 
     def close(self) -> None:
-        if self._conn is not None and self._conn.is_open:
+        """Release the tower. Silences it first — never leave one sounding."""
+        if self._transport == "wifi":
+            self._http("STOP")
+        elif self._conn is not None and self._conn.is_open:
             self._command("STOP")
+        if self._conn is not None and self._conn.is_open:
             self._conn.close()
         self._conn = None
+        self._transport = "none"
+        self._host = None
 
     # -------------------------------------------------------------- status
     def status(self) -> dict:
         st = self.connect()
+        net = self._command("NET") if st.connected else None
         return {
             "enabled": SIREN_ENABLED,
             "connected": st.connected,
+            "transport": self._transport,
             "port": st.port,
+            "host": self._host,
+            "network": net,
             "firmware": st.firmware,
             "error": st.error,
             "sounding": time.time() < self._sounding_until,
@@ -274,6 +361,21 @@ class SirenTower:
 tower = SirenTower()
 
 
+# Both transports block: pyserial always, and httpx here is the sync client so
+# one code path serves both. Every entry point therefore hands off to a thread —
+# discovery alone can spend several seconds failing over candidate hosts, and
+# that must never stall the service that is meant to be dispatching warnings.
 async def sound_async(category: str, seconds: int = 10, **kw) -> dict:
-    """Serial I/O is blocking; keep it off the event loop."""
     return await asyncio.to_thread(tower.sound, category, seconds, **kw)
+
+
+async def status_async() -> dict:
+    return await asyncio.to_thread(tower.status)
+
+
+async def self_test_async() -> dict:
+    return await asyncio.to_thread(tower.self_test)
+
+
+async def all_clear_async() -> dict:
+    return await asyncio.to_thread(tower.all_clear)
