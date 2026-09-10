@@ -45,6 +45,11 @@ export const predictions = {
 export const alerts = {
   previewSms: (payload) => client.post('/alerts/sms/preview', payload).then((r) => r.data),
   sendSms: (payload) => client.post('/alerts/sms', payload).then((r) => r.data),
+  // Siren tower — the channel that works with no cellular network at all.
+  sirenStatus: () => client.get('/alerts/siren/status').then((r) => r.data),
+  sirenTest: () => client.post('/alerts/siren/test').then((r) => r.data),
+  soundSiren: (payload) => client.post('/alerts/siren', payload).then((r) => r.data),
+  stopSiren: () => client.post('/alerts/siren/stop').then((r) => r.data),
   list: (params) => client.get('/alerts', { params }).then((r) => r.data),
   get: (id) => client.get(`/alerts/${id}`).then((r) => r.data),
   acknowledge: (id) => client.post(`/alerts/${id}/acknowledge`).then((r) => r.data),

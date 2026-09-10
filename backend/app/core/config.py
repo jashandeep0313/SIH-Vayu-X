@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     # at the forecast landfall point. Point service only: no map tiles.
     WINDY_POINT_API_KEY: str = ""
 
+    # Siren tower: fire automatically when a classification clears the bar.
+    # Off by default — turning a physical siren on is a deliberate act.
+    SIREN_AUTO_ON_UPLOAD: bool = False
+    # A siren that cries wolf stops being evacuated for. The model's own
+    # confidence gates the automatic path: on the labelled test frames it read
+    # 96% where the estimate was 0.5 kt out and 29% where it was 33 kt out, so
+    # this threshold is doing real work rather than decorating the response.
+    SIREN_MIN_CONFIDENCE_PCT: int = 70
+    SIREN_AUTO_SECONDS: int = 15
+
     # Object storage
     S3_ENDPOINT: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "minioadmin"

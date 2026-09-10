@@ -144,3 +144,20 @@ def test_real_rulebook_fires_on_a_severe_landfall():
     )
     assert match is not None
     assert match.severity == "RED"
+
+
+def test_missing_rules_path_falls_back_to_packaged_rules():
+    """ALERT_RULES_PATH holds the container path; a local run must not silently
+    end up with a dead engine that still reports healthy."""
+    engine = RuleEngine("/app/config/alert_rules.yaml")
+    engine.load()
+    assert engine.rule_count > 0
+    assert engine.load_error is not None
+    assert "fell back" in engine.load_error
+
+
+def test_load_error_is_none_when_path_is_correct():
+    engine = RuleEngine("config/alert_rules.yaml")
+    engine.load()
+    assert engine.rule_count > 0
+    assert engine.load_error is None

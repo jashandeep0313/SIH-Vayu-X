@@ -119,6 +119,68 @@ def _mock_result(digest: str, filename: str, size: int) -> dict:
     }
 
 
+SIREN_CATEGORIES = {"SCS", "VSCS", "ESCS", "SuCS"}
+
+
+async def _maybe_sound_siren(result: dict) -> dict:
+    """Fire the physical tower when a classification clears the bar.
+
+    This is the one alert path that runs without a human. SMS does not, because
+    it costs credits and messages real people; a siren costs nothing per
+    sounding and a tower that waits for an operator is no use at 03:00 when the
+    control room link is down.
+
+    Four things must all hold, and every refusal says which one failed:
+      * the automatic path is switched on
+      * the image was actually scored (a refused/out-of-distribution frame has
+        no classification, and must never sound anything)
+      * the category is at or above SCS
+      * the model is confident enough
+
+    Never raises and never blocks the upload. If the tower is unreachable the
+    analysis still returns — losing the siren must not also lose the estimate.
+    """
+    if not settings.SIREN_AUTO_ON_UPLOAD:
+        return {"attempted": False, "reason": "automatic siren disabled (SIREN_AUTO_ON_UPLOAD)"}
+
+    classification = result.get("classification")
+    if not classification:
+        return {"attempted": False, "reason": "image was not scored — nothing to alert on"}
+
+    category = classification.get("intensity_category")
+    if category not in SIREN_CATEGORIES:
+        return {"attempted": False, "category": category, "reason": f"{category} is below SCS"}
+
+    confidence = result.get("confidence_pct")
+    if confidence is None or confidence < settings.SIREN_MIN_CONFIDENCE_PCT:
+        return {
+            "attempted": False,
+            "category": category,
+            "confidence_pct": confidence,
+            "reason": (
+                f"confidence {confidence}% is below the "
+                f"{settings.SIREN_MIN_CONFIDENCE_PCT}% required to sound automatically — "
+                "an operator can still trigger it manually"
+            ),
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.post(
+                f"{settings.ALERT_SERVICE_URL}/alert/siren",
+                json={
+                    "intensity_category": category,
+                    "seconds": settings.SIREN_AUTO_SECONDS,
+                    "auto": True,
+                },
+            )
+        if r.status_code != 200:
+            return {"attempted": True, "sounded": False, "reason": r.text[:200]}
+        return {"attempted": True, **r.json()}
+    except httpx.HTTPError as exc:
+        return {"attempted": True, "sounded": False, "reason": f"tower unreachable: {exc}"}
+
+
 @router.post("/upload")
 async def analyse_upload(file: UploadFile = File(...)) -> dict:
     """Upload a satellite image and get a (currently mocked) classification."""
@@ -157,6 +219,7 @@ async def analyse_upload(file: UploadFile = File(...)) -> dict:
                     "sha256": digest[:16],
                 }
             )
+            result["siren"] = await _maybe_sound_siren(result)
             return result
         detail = response.text[:200]
     except httpx.HTTPError as exc:

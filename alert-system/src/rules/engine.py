@@ -23,6 +23,13 @@ class MatchedRule:
     review_required: bool = False
 
 
+# The rule file as it sits in the repo. ALERT_RULES_PATH points at the
+# container path (/app/config/...) which does not exist when the service is run
+# directly, so a configured-but-missing path must fall back to this rather than
+# leaving the engine empty.
+PACKAGED_RULES = Path(__file__).resolve().parents[2] / "config" / "alert_rules.yaml"
+
+
 class RuleEngine:
     def __init__(self, rules_path: str | Path) -> None:
         self.rules_path = Path(rules_path)
@@ -30,6 +37,8 @@ class RuleEngine:
         self.defaults: dict = {}
         self.escalation: dict = {}
         self.geofence_config: dict = {}
+        self.source: str | None = None
+        self.load_error: str | None = None
         self._last_fired: dict[str, datetime] = {}
 
     @property
@@ -37,11 +46,32 @@ class RuleEngine:
         return len(self.rules)
 
     def load(self) -> None:
-        """Load (or hot-reload) the rule file."""
-        if not self.rules_path.exists():
-            self.rules = []
-            return
-        with open(self.rules_path) as f:
+        """Load (or hot-reload) the rule file.
+
+        An alert engine with no rules is not "quiet", it is broken — it accepts
+        every event and dispatches nothing. Silently returning an empty list on
+        a missing file hid exactly that: ALERT_RULES_PATH holds the container
+        path, so every local run had a dead engine and reported healthy. So a
+        missing path now falls back to the packaged rules and records why.
+        """
+        self.load_error = None
+        path = self.rules_path
+
+        if not path.exists():
+            if PACKAGED_RULES.exists():
+                self.load_error = (
+                    f"{path} not found — fell back to packaged rules at {PACKAGED_RULES}. "
+                    "(ALERT_RULES_PATH is set to the container path.)"
+                )
+                path = PACKAGED_RULES
+            else:
+                self.rules = []
+                self.source = None
+                self.load_error = f"no rule file at {path} and no packaged fallback"
+                return
+
+        self.source = str(path)
+        with open(path) as f:
             config = yaml.safe_load(f) or {}
         self.defaults = config.get("defaults", {})
         self.rules = config.get("rules", [])

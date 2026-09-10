@@ -10,6 +10,9 @@ aiosmtplib==3.0.2
 firebase-admin==6.6.0
 httpx==0.28.1
 
+# ---- Hardware (last-mile siren tower over USB serial) ----
+pyserial==3.5
+
 # ---- Templating ----
 jinja2==3.1.5
 

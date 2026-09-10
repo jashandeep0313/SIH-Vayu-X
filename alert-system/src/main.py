@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from src.manual_sms import build_message, is_alertable, send_alert
 from src.rendering import render_alert
 from src.rules.engine import RuleEngine
+from src.siren_device import sound_async, tower
 
 rule_engine = RuleEngine(os.getenv("ALERT_RULES_PATH", "config/alert_rules.yaml"))
 
@@ -23,6 +24,8 @@ rule_engine = RuleEngine(os.getenv("ALERT_RULES_PATH", "config/alert_rules.yaml"
 async def lifespan(app: FastAPI):
     rule_engine.load()
     yield
+    # Leave no tower sounding when the service stops.
+    tower.close()
 
 
 app = FastAPI(
@@ -45,16 +48,22 @@ class Subscriber(BaseModel):
 @app.get("/health", tags=["meta"])
 async def health() -> dict:
     """Liveness plus channel readiness — an alert service that cannot send is not healthy."""
+    # An engine with zero rules matches nothing and dispatches nothing. Calling
+    # that "ok" is how a dead alert system passes a health check.
     return {
-        "status": "ok",
+        "status": "ok" if rule_engine.rule_count else "degraded",
         "service": "vayux-alert-system",
         "dry_run": os.getenv("ALERT_DRY_RUN", "true").lower() == "true",
         "rules_loaded": rule_engine.rule_count,
+        "rules_source": rule_engine.source,
+        "rules_warning": rule_engine.load_error,
         "channels": {
             "sms": bool(os.getenv("TWILIO_ACCOUNT_SID")),
             "email": bool(os.getenv("SMTP_HOST")),
             "push": bool(os.getenv("FCM_SERVER_KEY")),
             "webhook": bool(os.getenv("ALERT_WEBHOOK_URL")),
+            # The one channel that does not need a network to reach anybody.
+            "siren": os.getenv("SIREN_ENABLED", "false").lower() == "true",
         },
     }
 
@@ -133,6 +142,65 @@ async def send_sms(payload: SmsRequest) -> dict:
         message = build_message(payload.analysis, payload.region)["text"]
 
     return await send_alert(payload.number, message, payload.confirm, payload.flash)
+
+
+# ------------------------------------------------ last-mile siren tower
+class SirenRequest(BaseModel):
+    intensity_category: str
+    seconds: int = 10
+    confirm: bool = False
+    auto: bool = False
+
+
+@app.get("/alert/siren/status", tags=["siren"])
+async def siren_status() -> dict:
+    """Is the tower reachable? Lists every serial port so a bad cable is obvious.
+
+    Worth calling before a demo: it is the difference between finding out now
+    and finding out in front of judges.
+    """
+    return tower.status()
+
+
+@app.post("/alert/siren/test", tags=["siren"])
+async def siren_test() -> dict:
+    """Cycle the lamps and chirp once. Proves the hardware works end to end."""
+    return tower.self_test()
+
+
+@app.post("/alert/siren", tags=["siren"])
+async def siren_sound(payload: SirenRequest) -> dict:
+    """Sound the tower.
+
+    Unlike SMS this may fire automatically (`auto=true`) — a siren costs nothing
+    per sounding and a tower that waits for a human defeats its purpose. It is
+    still off unless SIREN_ENABLED=true, and every sounding is duration-capped.
+    """
+    return await sound_async(
+        payload.intensity_category,
+        payload.seconds,
+        confirm=payload.confirm,
+        auto=payload.auto,
+    )
+
+
+@app.post("/alert/siren/stop", tags=["siren"])
+async def siren_stop() -> dict:
+    """All clear — silence the siren and return the lamps to green."""
+    return tower.all_clear()
+
+
+@app.post("/alert/siren/release", tags=["siren"])
+async def siren_release() -> dict:
+    """Let go of the serial port.
+
+    The connection is deliberately held open (reopening resets the board), but
+    that also means this service owns the port and reflashing the ESP32 fails
+    with "access denied". Rather than making people stop the whole service to
+    upload firmware, hand the port back. The next siren call reconnects.
+    """
+    tower.close()
+    return {"released": True, "note": "port free — reflash now; next alert reconnects"}
 
 
 @app.post("/dispatch", tags=["alerts"])

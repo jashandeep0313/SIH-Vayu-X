@@ -121,3 +121,54 @@ async def send_sms_alert(payload: SmsAlertRequest) -> dict:
     if r.status_code != 200:
         raise HTTPException(status_code=r.status_code, detail=r.text[:300])
     return r.json()
+
+
+# ------------------------------------------------------------- siren tower
+class SirenAlertRequest(BaseModel):
+    intensity_category: str
+    seconds: int = 10
+    confirm: bool = False
+
+
+@router.get("/siren/status")
+async def siren_status() -> dict:
+    """Is the physical tower reachable? Used by the dashboard to show its state."""
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(f"{settings.ALERT_SERVICE_URL}/alert/siren/status")
+        return r.json()
+    except httpx.HTTPError as exc:
+        # The dashboard must still render when the alert service is down.
+        return {"enabled": False, "connected": False, "error": str(exc)}
+
+
+@router.post("/siren/test")
+async def siren_test() -> dict:
+    """Cycle the lamps and chirp — proves the hardware before a demo."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{settings.ALERT_SERVICE_URL}/alert/siren/test")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
+@router.post("/siren")
+async def sound_siren(payload: SirenAlertRequest) -> dict:
+    """Operator-triggered sounding. The automatic path lives in inference.py."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            f"{settings.ALERT_SERVICE_URL}/alert/siren", json=payload.model_dump()
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()
+
+
+@router.post("/siren/stop")
+async def stop_siren() -> dict:
+    """All clear."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{settings.ALERT_SERVICE_URL}/alert/siren/stop")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:300])
+    return r.json()

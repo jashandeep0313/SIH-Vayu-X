@@ -3,6 +3,7 @@ import { Upload, FileImage, AlertTriangle, RotateCcw } from 'lucide-react';
 import { CategoryBadge, ConfidenceBar } from '../components/common/Badges.jsx';
 import { LoadingState } from '../components/common/States.jsx';
 import SmsAlertPanel from '../components/alerts/SmsAlertPanel.jsx';
+import SirenAlertPanel from '../components/alerts/SirenAlertPanel.jsx';
 import { inference } from '../services/api.js';
 import {
   categoryColor,
@@ -388,6 +389,7 @@ export default function Analyze() {
               )}
 
               <SmsAlertPanel analysis={result} />
+              <SirenAlertPanel analysis={result} autoResult={result.siren} />
 
               {result.wind_field?.wind_radii && (
                 <div>
